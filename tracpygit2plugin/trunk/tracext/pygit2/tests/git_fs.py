@@ -33,6 +33,7 @@ REPOS_URL = 'http://example.org/git/test.git'
 HEAD_REV = u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'
 
 dumpfile_path = os.path.join(os.path.dirname(__file__), 'git-fast-export.dump')
+repos_path = None
 git_bin = locate('git')
 
 
@@ -44,7 +45,7 @@ def spawn(*args, **kwargs):
     assert proc.returncode == 0, stderr
 
 
-def setup_repository(env, path, use_dump=True):
+def create_repository(path, use_dump=True):
     pygit2.init_repository(path, True)
     if use_dump:
         f = open(dumpfile_path, 'rb')
@@ -52,6 +53,9 @@ def setup_repository(env, path, use_dump=True):
             spawn(git_bin, '--git-dir=' + path, 'fast-import', stdin=f)
         finally:
             f.close()
+
+
+def setup_repository(env, path):
     provider = DbRepositoryProvider(env)
     provider.add_repository(REPOS_NAME, path, 'pygit2')
     provider.modify_repository(REPOS_NAME, {'url': REPOS_URL})
@@ -79,20 +83,42 @@ def rmtree(path):
     shutil.rmtree(path, onerror=onerror)
 
 
+class GitRepositoryTestSuite(unittest.TestSuite):
+
+    use_dump = True
+
+    def run(self, result):
+        try:
+            self.setUp()
+            unittest.TestSuite.run(self, result)
+        finally:
+            self.tearDown()
+        return result
+
+    def setUp(self):
+        create_repository(repos_path, self.use_dump)
+
+    def tearDown(self):
+        if os.path.isdir(repos_path):
+            rmtree(repos_path)
+
+
+class EmptyGitRepositoryTestSuite(GitRepositoryTestSuite):
+
+    use_dump = False
+
+
 class EmptyTestCase(unittest.TestCase):
 
     def setUp(self):
         self.env = EnvironmentStub(enable=['trac.*', 'tracext.pygit2.*'])
-        self.repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
-        self.repos = setup_repository(self.env, self.repos_path,
-                                      use_dump=False)
+        self.repos = setup_repository(self.env, repos_path)
 
     def tearDown(self):
         self.repos.close()
+        self.repos = None
         RepositoryManager(self.env).reload_repositories()
         self.env.reset_db()
-        if os.path.isdir(self.repos_path):
-            rmtree(self.repos_path)
 
     def test_empty(self):
         if hasattr(pygit2.Repository, 'is_empty'):
@@ -174,15 +200,13 @@ class NormalTestCase(unittest.TestCase):
 
     def setUp(self):
         self.env = EnvironmentStub(enable=['trac.*', 'tracext.pygit2.*'])
-        self.repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
-        self.repos = setup_repository(self.env, self.repos_path)
+        self.repos = setup_repository(self.env, repos_path)
 
     def tearDown(self):
         self.repos.close()
+        self.repos = None
         RepositoryManager(self.env).reload_repositories()
         self.env.reset_db()
-        if os.path.isdir(self.repos_path):
-            rmtree(self.repos_path)
 
     def test_not_empty(self):
         if hasattr(pygit2.Repository, 'is_empty'):
@@ -226,7 +250,7 @@ class NormalTestCase(unittest.TestCase):
     def test_get_path_url_not_specified(self):
         provider = DbRepositoryProvider(self.env)
         reponame = REPOS_NAME + '.alternative'
-        provider.add_repository(reponame, self.repos_path, 'pygit2')
+        provider.add_repository(reponame, repos_path, 'pygit2')
         repos = self.env.get_repository(reponame)
         self.assertEquals(None, repos.get_path_url('/', None))
 
@@ -596,10 +620,15 @@ class NormalTestCase(unittest.TestCase):
 
 
 def suite():
+    global repos_path
     suite = unittest.TestSuite()
     if pygit2 and git_bin:
-        suite.addTest(unittest.makeSuite(EmptyTestCase, 'test'))
-        suite.addTest(unittest.makeSuite(NormalTestCase, 'test'))
+        repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
+        os.rmdir(repos_path)
+        suite.addTest(unittest.makeSuite(
+            EmptyTestCase, 'test', suiteClass=EmptyGitRepositoryTestSuite))
+        suite.addTest(unittest.makeSuite(
+            NormalTestCase, 'test', suiteClass=GitRepositoryTestSuite))
     else:
         print('SKIP: %s (no git binary installed)' % __module__)
     return suite
