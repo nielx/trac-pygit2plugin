@@ -27,7 +27,7 @@ else:
 
 from genshi.builder import tag
 
-from trac.config import BoolOption, IntOption, PathOption, Option
+from trac.config import BoolOption, IntOption, Option
 from trac.core import Component, implements, TracError
 from trac.env import ISystemInfoProvider
 from trac.util import shorten_line
@@ -37,7 +37,7 @@ from trac.util.text import exception_to_unicode, to_unicode
 from trac.util.translation import _, N_, tag_, gettext
 from trac.versioncontrol.api import (
     Changeset, Node, Repository, IRepositoryConnector, NoSuchChangeset,
-    NoSuchNode, IRepositoryProvider,
+    NoSuchNode,
 )
 from trac.versioncontrol.cache import CachedRepository, CachedChangeset
 from trac.versioncontrol.web_ui import IPropertyRenderer, RenderedProperty
@@ -528,6 +528,11 @@ class GitRepository(Repository):
     def _to_fspath(self, name):
         return name.encode(self.git_fs_encoding)
 
+    def _stringify_rev(self, rev):
+        if rev is not None and not isinstance(rev, unicode):
+            rev = to_unicode(rev)
+        return rev
+
     def _get_commit_username(self, commit):
         if self.use_committer_id:
             signature = commit.committer or commit.author
@@ -686,16 +691,9 @@ class GitRepository(Repository):
                       if rev in walker)
 
     def _resolve_rev(self, rev, raises=True):
-        if rev is not None and not isinstance(rev, unicode):
-            if isinstance(rev, str):
-                normrev = unicode(rev, 'latin1')
-            else:
-                normrev = to_unicode(rev)
-        else:
-            normrev = rev
-
         git_repos = self.git_repos
-        if not normrev:
+        rev = self._stringify_rev(rev)
+        if not rev:
             try:
                 head = git_repos.head
                 if type(head) is pygit2.Reference:
@@ -706,7 +704,7 @@ class GitRepository(Repository):
                     raise NoSuchChangeset(rev)
                 return None
 
-        commit = self._get_commit(normrev)
+        commit = self._get_commit(rev)
         if commit:
             return commit
 
@@ -714,9 +712,9 @@ class GitRepository(Repository):
             ref = git_repos.lookup_reference(name)
             name = self._from_fspath(name)
             if name.startswith('refs/heads/'):
-                match = name[11:] == normrev
+                match = name[11:] == rev
             elif name.startswith('refs/tags/'):
-                match = name[10:] == normrev
+                match = name[10:] == rev
             else:
                 continue
             if not match:
@@ -774,9 +772,10 @@ class GitRepository(Repository):
     display_rev = short_rev
 
     def get_node(self, path, rev=None):
+        rev = self._stringify_rev(rev)
         commit = self._resolve_rev(rev, raises=False)
-        if not commit:
-            raise NoSuchNode(path, rev)
+        if commit is None and rev:
+            raise NoSuchChangeset(rev)
         return GitNode(self, self.normalize_path(path), commit)
 
     def get_quickjump_entries(self, rev):
@@ -938,29 +937,39 @@ class GitNode(Node):
             commit = rev
             rev = commit.hex
         else:
+            if rev is not None and not isinstance(rev, unicode):
+                rev = to_unicode(rev)
             commit = repos._resolve_rev(rev, raises=False)
-            if not commit:
-                raise NoSuchNode(path, rev)
-        normrev = commit.hex
+            if commit is None and rev:
+                raise NoSuchChangeset(rev)
 
         tree_entry = None
-        git_object = commit.tree
-        if path:
-            tree_entry = repos._get_tree_entry(git_object, path)
-            if tree_entry is None:
+        if commit:
+            normrev = commit.hex
+            git_object = commit.tree
+            if path:
+                tree_entry = repos._get_tree_entry(git_object, path)
+                if tree_entry is None:
+                    raise NoSuchNode(path, rev)
+                git_object = repos.git_repos.get(tree_entry.oid)
+            if git_object.type == GIT_OBJ_TREE:
+                kind = Node.DIRECTORY
+                tree = git_object
+                blob = None
+            elif git_object.type == GIT_OBJ_BLOB:
+                kind = Node.FILE
+                tree = None
+                blob = git_object
+            else:
                 raise NoSuchNode(path, rev)
-            git_object = repos.git_repos.get(tree_entry.oid)
-
-        if git_object.type == GIT_OBJ_TREE:
-            kind = Node.DIRECTORY
-            tree = git_object
-            blob = None
-        elif git_object.type == GIT_OBJ_BLOB:
-            kind = Node.FILE
-            tree = None
-            blob = git_object
         else:
-            raise NoSuchNode(path, rev)
+            if path:
+                raise NoSuchNode(path, rev)
+            normrev = None
+            kind = Node.DIRECTORY
+            git_object = None
+            tree = None
+            blob = None
 
         self.commit = commit
         self.tree_entry = tree_entry
@@ -980,7 +989,10 @@ class GitNode(Node):
 
     @property
     def created_rev(self):
-        return self._get_created_commit().hex
+        commit = self._get_created_commit()
+        if commit is None:
+            return None
+        return commit.hex
 
     def _walk_commits(self, rev, path=None):
         if path is None:
@@ -1034,7 +1046,7 @@ class GitNode(Node):
         return annotations
 
     def get_entries(self):
-        if not self.isdir:
+        if self.commit is None or not self.isdir:
             return
 
         repos = self.repos
@@ -1083,7 +1095,7 @@ class GitNode(Node):
         commits = get_commits()
         for name in names:
             yield GitNode(repos, posixpath.join(self.path, _from_fspath(name)),
-                          self.rev, created_commit=commits.get(name))
+                          self.commit, created_commit=commits.get(name))
 
     def get_content_type(self):
         if self.isdir:
@@ -1108,6 +1120,8 @@ class GitNode(Node):
         if not self.isfile:
             return None
         commit = self._get_created_commit()
+        if commit is None:
+            return None
         return self.repos._get_commit_time(commit)
 
 

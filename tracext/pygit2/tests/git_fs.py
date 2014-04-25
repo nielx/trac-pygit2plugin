@@ -147,12 +147,21 @@ class EmptyTestCase(unittest.TestCase):
 
     def test_has_node(self):
         self.assertEquals(False, self.repos.has_node('/', '1' * 40))
-        self.assertEquals(False, self.repos.has_node('/'))
+        self.assertEquals(True, self.repos.has_node('/'))
         self.assertEquals(False, self.repos.has_node('/', 'fc398de'))
 
     def test_get_node(self):
-        self.assertRaises(NoSuchNode, self.repos.get_node, '/')
-        self.assertRaises(NoSuchNode, self.repos.get_node, '/', 'fc398de')
+        node = self.repos.get_node('/')
+        self.assertEquals('', node.path)
+        self.assertEquals('', node.created_path)
+        self.assertEquals(None, node.rev)
+        self.assertEquals(None, node.created_rev)
+        self.assertEquals([], list(node.get_entries()))
+        self.assertEquals([], list(node.get_history()))
+        self.assertRaises(NoSuchChangeset, self.repos.get_node, '/', 'fc398de')
+        self.assertRaises(NoSuchNode, self.repos.get_node, '/path')
+        self.assertRaises(NoSuchChangeset, self.repos.get_node, '/path',
+                          'fc398de')
 
     def test_oldest_rev(self):
         self.assertEquals(None, self.repos.oldest_rev)
@@ -367,6 +376,14 @@ class NormalTestCase(unittest.TestCase):
         self.assertEquals(True, self.repos.has_node('/', '0ee9cfd'))
         self.assertEquals(True, self.repos.has_node('/'))
         self.assertEquals(True, self.repos.has_node('/.gitignore', 'fc398de'))
+
+    def test_get_node(self):
+        node = self.repos.get_node(u'/')
+        self.assertEquals(HEAD_REV, node.rev)
+        self.assertEquals('', node.path)
+
+    def test_get_node_invalid_rev(self):
+        self.assertRaises(NoSuchChangeset, self.repos.get_node, u'/', '1' * 40)
 
     def test_get_node_nonexistent(self):
         self.assertRaises(NoSuchNode, self.repos.get_node, u'/āāā/file.txt',
