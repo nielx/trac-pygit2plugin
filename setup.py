@@ -30,6 +30,7 @@ setup(
     package_data={},
     test_suite='tracext.pygit2.tests.suite',
     zip_safe=True,
+    install_requires = ['Trac >= 0.12', 'pygit2'],
     entry_points={
         'trac.plugins': [
             'tracext.pygit2.git_fs = tracext.pygit2.git_fs',
