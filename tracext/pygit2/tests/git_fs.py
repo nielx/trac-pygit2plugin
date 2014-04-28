@@ -647,7 +647,7 @@ def suite():
         suite.addTest(unittest.makeSuite(
             NormalTestCase, 'test', suiteClass=GitRepositoryTestSuite))
     else:
-        print('SKIP: %s (no git binary installed)' % __module__)
+        print('SKIP: %s (no git binary installed)' % __name__)
     return suite
 
 
