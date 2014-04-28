@@ -32,7 +32,7 @@ REPOS_NAME = 'test.git'
 REPOS_URL = 'http://example.org/git/test.git'
 HEAD_REV = u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'
 
-dumpfile_path = os.path.join(os.path.dirname(__file__), 'git-fast-export.dump')
+dumpfile_path = os.path.join(os.path.dirname(__file__), 'gitrepos.dump')
 repos_path = None
 git_bin = locate('git')
 
