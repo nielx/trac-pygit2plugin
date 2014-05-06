@@ -6,17 +6,7 @@ import sys
 from setuptools import setup, find_packages
 from pkg_resources import parse_version
 
-try:
-    from trac import __version__ as trac_version
-except ImportError:
-    trac_version = '0.0'
-if parse_version(trac_version) < parse_version('0.12'):
-    print 'Require Trac 0.12 or later'
-    sys.exit(1)
-
-
 extra = {}
-
 
 setup(
     name='TracPygit2Plugin',
@@ -30,7 +20,7 @@ setup(
     package_data={},
     test_suite='tracext.pygit2.tests.suite',
     zip_safe=True,
-    install_requires = ['Trac >= 0.12', 'pygit2'],
+    install_requires=['Trac', 'pygit2'],
     entry_points={
         'trac.plugins': [
             'tracext.pygit2.git_fs = tracext.pygit2.git_fs',
