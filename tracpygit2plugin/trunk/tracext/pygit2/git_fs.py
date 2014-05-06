@@ -68,13 +68,14 @@ except ImportError:
 __all__ = ['GitCachedRepository', 'GitCachedChangeset', 'GitConnector',
            'GitRepository', 'GitChangeset', 'GitNode']
 
+GIT_DELTA_ADDED = 'A'
+GIT_DELTA_DELETED = 'D'
+GIT_DELTA_MODIFIED = 'M'
+GIT_DELTA_RENAMED = 'R'
+GIT_DELTA_COPIED = 'C'
+SUBMODULE_FILEMODE = 0160000
 
 if pygit2:
-    GIT_DELTA_ADDED = 'A'
-    GIT_DELTA_DELETED = 'D'
-    GIT_DELTA_MODIFIED = 'M'
-    GIT_DELTA_RENAMED = 'R'
-    GIT_DELTA_COPIED = 'C'
     _DELTA_STATUS_MAP = {
         GIT_DELTA_ADDED:    Changeset.ADD,
         GIT_DELTA_DELETED:  Changeset.DELETE,
@@ -82,8 +83,13 @@ if pygit2:
         GIT_DELTA_RENAMED:  Changeset.MOVE,
         GIT_DELTA_COPIED:   Changeset.COPY,
     }
+    if hasattr(pygit2.TreeEntry, 'filemode'):
+        _get_filemode = lambda tree_entry: tree_entry.filemode
+    else:
+        _get_filemode = lambda tree_entry: tree_entry.attributes
 else:
     _DELTA_STATUS_MAP = {}
+    _get_filemode = None
 
 
 class GitCachedRepository(CachedRepository):
@@ -944,6 +950,9 @@ class GitNode(Node):
                 raise NoSuchChangeset(rev)
 
         tree_entry = None
+        filemode = None
+        tree = None
+        blob = None
         if commit:
             normrev = commit.hex
             git_object = commit.tree
@@ -951,30 +960,35 @@ class GitNode(Node):
                 tree_entry = repos._get_tree_entry(git_object, path)
                 if tree_entry is None:
                     raise NoSuchNode(path, rev)
-                git_object = repos.git_repos.get(tree_entry.oid)
-            if git_object.type == GIT_OBJ_TREE:
+                filemode = _get_filemode(tree_entry)
+                if filemode == SUBMODULE_FILEMODE:
+                    git_object = None
+                else:
+                    git_object = repos.git_repos.get(tree_entry.oid)
+            if git_object is None:
+                if filemode == SUBMODULE_FILEMODE:
+                    kind = Node.DIRECTORY
+                else:
+                    kind = None
+            elif git_object.type == GIT_OBJ_TREE:
                 kind = Node.DIRECTORY
                 tree = git_object
-                blob = None
             elif git_object.type == GIT_OBJ_BLOB:
                 kind = Node.FILE
-                tree = None
                 blob = git_object
-            else:
+            if kind is None:
                 raise NoSuchNode(path, rev)
         else:
             if path:
                 raise NoSuchNode(path, rev)
             normrev = None
             kind = Node.DIRECTORY
-            git_object = None
-            tree = None
-            blob = None
 
         self.commit = commit
         self.tree_entry = tree_entry
         self.tree = tree
         self.blob = blob
+        self.filemode = filemode
         self.created_path = path  # XXX how to use?
         self._created_commit = created_commit
         Node.__init__(self, repos, path, normrev, kind)
@@ -1028,11 +1042,8 @@ class GitNode(Node):
 
     def get_properties(self):
         props = {}
-        if self.tree_entry:
-            mode = getattr(self.tree_entry, 'filemode', None)
-            if mode is None:
-                mode = self.tree_entry.attributes  # 0.17.3
-            props['mode'] = '%06o' % mode
+        if self.filemode is not None:
+            props['mode'] = '%06o' % self.filemode
         return props
 
     def get_annotations(self):
@@ -1046,7 +1057,7 @@ class GitNode(Node):
         return annotations
 
     def get_entries(self):
-        if self.commit is None or not self.isdir:
+        if self.commit is None or self.tree is None or not self.isdir:
             return
 
         repos = self.repos
