@@ -30,7 +30,7 @@ from tracext.pygit2 import git_fs
 
 REPOS_NAME = 'test.git'
 REPOS_URL = 'http://example.org/git/test.git'
-HEAD_REV = u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'
+HEAD_REV = u'5fa8e424840c6c4dd331343550d870e6faafadf5'
 
 dumpfile_path = os.path.join(os.path.dirname(__file__), 'gitrepos.dump')
 repos_path = None
@@ -231,14 +231,11 @@ class NormalTestCase(unittest.TestCase):
 
     def test_get_quickjump_entries(self):
         entries = self.repos.get_quickjump_entries(None)
-        self.assertEquals(('branches', u'develöp', '/',
-                           '0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'),
+        self.assertEquals(('branches', u'develöp', '/', HEAD_REV),
                           entries.next())
-        self.assertEquals(('branches', u'master', '/',
-                           '0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'),
+        self.assertEquals(('branches', u'master', '/', HEAD_REV),
                           entries.next())
-        self.assertEquals(('branches', u'stâble', '/',
-                           '0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'),
+        self.assertEquals(('branches', u'stâble', '/', HEAD_REV),
                           entries.next())
         self.assertEquals(('tags', u'ver0.1', '/',
                            'fc398de9939a675d6001f204c099215337d4eb24'),
@@ -342,7 +339,7 @@ class NormalTestCase(unittest.TestCase):
             self.repos.get_changeset('fc398de').get_branches())
         self.assertEquals(
             [(u'develöp', True), ('master', True), (u'stâble', True)],
-            self.repos.get_changeset('0ee9cfd').get_branches())
+            self.repos.get_changeset(HEAD_REV[:7]).get_branches())
 
     def test_changeset_get_tags(self):
         self.assertEquals([u'ver0.1', u'vér0.1'],
@@ -486,6 +483,26 @@ class NormalTestCase(unittest.TestCase):
                            'add'),
                           history.next())
         self.assertRaises(StopIteration, history.next)
+
+    def test_get_node_submodule(self):
+        node = self.repos.get_node('/')
+        entries = dict((node.path, node) for node in node.get_entries())
+        self.assertTrue(u'submod' in entries)
+
+        node = entries.get(u'submod')
+        self.assertNotEquals(None, node)
+        self.assertEquals(HEAD_REV, node.rev)
+        self.assertTrue(node.isdir)
+        self.assertFalse(node.isfile)
+        self.assertEquals({'mode': '160000'}, node.get_properties())
+        self.assertEquals([], list(node.get_entries()))
+
+        node = self.repos.get_node('/submod')
+        self.assertNotEquals(None, node)
+        self.assertTrue(node.isdir)
+        self.assertFalse(node.isfile)
+        self.assertEquals({'mode': '160000'}, node.get_properties())
+        self.assertEquals([], list(node.get_entries()))
 
     # TODO: GitNode.get_annotations(self):
 

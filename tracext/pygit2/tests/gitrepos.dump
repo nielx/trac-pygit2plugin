@@ -47,13 +47,13 @@ M 100644 :5 āāā/file.txt
 
 blob
 mark :7
-data 12
-! root file
+data 48
+add dir2/simple.txt and dir2/simple-another.txt
 
 blob
 mark :8
-data 48
-add dir2/simple.txt and dir2/simple-another.txt
+data 12
+! root file
 
 commit refs/heads/develöp
 mark :9
@@ -63,22 +63,39 @@ data 29
 delete, modify, rename, copy
 from :6
 D dir/tété.txt
-M 100644 :8 dir2/simple-another.txt
-M 100644 :8 dir2/simple.txt
+M 100644 :7 dir2/simple-another.txt
+M 100644 :7 dir2/simple.txt
 M 100644 :2 root-sample.txt
-M 100644 :7 root-tété.txt
+M 100644 :8 root-tété.txt
 M 100644 :5 āāā-file.txt
 D āāā/file.txt
 
-reset refs/heads/master
+blob
+mark :10
+data 57
+[submodule "submod"]
+	path = submod
+	url = /tmp/gitrepos
+
+commit refs/heads/develöp
+mark :11
+author Joé <joe@example.com> 1399392953 +0900
+committer Joé <joe@example.com> 1399392953 +0900
+data 24
+added submodule'd entry
 from :9
+M 100644 :10 .gitmodules
+M 160000 0ee9cfd6538b7b994b94a45ed173d9d45272b0c5 submod
+
+reset refs/heads/master
+from :11
 
 reset refs/tags/vér0.1
 from :6
 
 reset refs/heads/stâble
-from :9
+from :11
 
 reset refs/heads/master
-from :9
+from :11
 
