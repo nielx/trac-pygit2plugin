@@ -34,7 +34,7 @@ HEAD_REV = u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'
 
 dumpfile_path = os.path.join(os.path.dirname(__file__), 'gitrepos.dump')
 repos_path = None
-git_bin = locate('git')
+git_bin = None
 
 
 def spawn(*args, **kwargs):
@@ -637,7 +637,8 @@ class NormalTestCase(unittest.TestCase):
 
 
 def suite():
-    global repos_path
+    global repos_path, git_bin
+    git_bin = locate('git')
     suite = unittest.TestSuite()
     if pygit2 and git_bin:
         repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
