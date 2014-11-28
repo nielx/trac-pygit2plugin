@@ -1053,7 +1053,8 @@ class GitNode(Node):
         annotations = []
         # FIXME: How to blame file @ revision?!
         for hunk in git_repos.blame(self.repos._to_fspath(self.path)):
-            annotations.extend([hunk.final_commit_id] * hunk.lines_in_hunk)
+            commit_id = str(hunk.final_commit_id)
+            annotations.extend([commit_id] * hunk.lines_in_hunk)
         return annotations
 
     def get_entries(self):
