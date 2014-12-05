@@ -243,9 +243,15 @@ class GitCachedRepository(CachedRepository):
 
             for name in git_repos.listall_references():
                 ref = git_repos.lookup_reference(name)
-                commit = git_repos[ref.target]
-                if not commit.parents:
+                git_object = git_repos[ref.target]
+                type_ = type(git_object)
+                if type_ is pygit2.Tag:
+                    git_object = git_repos[git_object.target]
+                    type_ = type(git_object)
+                if type_ is not pygit2.Commit or not git_object.parents:
                     continue
+
+                commit = git_object
                 rev = commit.hex
                 commits = traverse(commit, seen)  # topology ordered
                 while commits:
