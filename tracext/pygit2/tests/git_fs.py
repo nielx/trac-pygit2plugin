@@ -220,7 +220,7 @@ class NormalTestCase(object):
     def test_not_empty(self):
         if hasattr(pygit2.Repository, 'is_empty'):
             self.assertEquals(False, self.git_repos.is_empty)
-        self.assertEquals(pygit2.GIT_OBJ_COMMIT, self.git_repos.head.type)
+        self.assertEquals(pygit2.GIT_REF_OID, self.git_repos.head.type)
 
     def test_linear_changesets(self):
         self.assertEquals(False, self.repos.has_linear_changesets)
