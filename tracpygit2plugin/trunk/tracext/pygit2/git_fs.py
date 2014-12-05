@@ -257,7 +257,7 @@ class GitCachedRepository(CachedRepository):
                     @self.env.with_transaction()
                     def do_insert(db):
                         try:
-                            self._insert_changeset(db, rev, cset)
+                            self._insert_cset(db, rev, cset)
                             updated[0] = True
                         except IntegrityError, e:
                             self.log.info('Revision %s already cached: %r',
@@ -279,7 +279,7 @@ class GitCachedRepository(CachedRepository):
                     del self.metadata
             return
 
-    if not hasattr(CachedChangeset, 'remove_cache'):
+    if not hasattr(CachedRepository, 'remove_cache'):
         def remove_cache(self):
             self.log.info("Cleaning cache")
             @self.env.with_transaction()
@@ -298,7 +298,7 @@ class GitCachedRepository(CachedRepository):
                     """, [(self.id, k, '') for k in CACHE_METADATA_KEYS])
                 del self.metadata
 
-    if not hasattr(CachedChangeset, 'save_metadata'):
+    if not hasattr(CachedRepository, 'save_metadata'):
         def save_metadata(self, metadata):
             @self.env.with_transaction()
             def fn(db):
@@ -344,25 +344,29 @@ class GitCachedRepository(CachedRepository):
                 if invalidate:
                     del self.metadata
 
-    def _insert_changeset(self, db, rev, cset):
-        cursor = db.cursor()
-        srev = self.db_rev(rev)
-        cursor.execute("""
-            INSERT INTO revision (repos,rev,time,author,message)
-            VALUES (%s,%s,%s,%s,%s)
-            """, (self.id, srev, to_utimestamp(cset.date),
-                  cset.author, cset.message))
-        for path, kind, action, bpath, brev in cset.get_changes():
-            self.log.debug("Caching node change in [%s]: %r", rev,
-                           (path, kind, action, bpath, brev))
-            kind = _inverted_kindmap[kind]
-            action = _inverted_actionmap[action]
+    if hasattr(CachedRepository, 'insert_changeset'):
+        def _insert_cset(self, db, rev, cset):
+            return self.insert_changeset(rev, cset)
+    else:
+        def _insert_cset(self, db, rev, cset):
+            cursor = db.cursor()
+            srev = self.db_rev(rev)
             cursor.execute("""
-                INSERT INTO node_change
-                    (repos,rev,path,node_type,change_type,base_path,
-                     base_rev)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
-                """, (self.id, srev, path, kind, action, bpath, brev))
+                INSERT INTO revision (repos,rev,time,author,message)
+                VALUES (%s,%s,%s,%s,%s)
+                """, (self.id, srev, to_utimestamp(cset.date),
+                      cset.author, cset.message))
+            for path, kind, action, bpath, brev in cset.get_changes():
+                self.log.debug("Caching node change in [%s]: %r", rev,
+                               (path, kind, action, bpath, brev))
+                kind = _inverted_kindmap[kind]
+                action = _inverted_actionmap[action]
+                cursor.execute("""
+                    INSERT INTO node_change
+                        (repos,rev,path,node_type,change_type,base_path,
+                         base_rev)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    """, (self.id, srev, path, kind, action, bpath, brev))
 
 
 class GitCachedChangeset(CachedChangeset):
