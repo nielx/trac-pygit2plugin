@@ -19,8 +19,8 @@ except ImportError:
     libgit2_version = None
 else:
     from pygit2 import (
-        GIT_OBJ_COMMIT, GIT_OBJ_TREE, GIT_OBJ_BLOB, GIT_OBJ_TAG,
-        GIT_SORT_TIME, GIT_SORT_REVERSE,
+        GIT_OBJ_BLOB, GIT_OBJ_COMMIT, GIT_OBJ_TAG, GIT_OBJ_TREE,
+        GIT_SORT_REVERSE, GIT_SORT_TIME,
     )
     pygit2_version = pygit2.__version__
     if hasattr(pygit2, 'LIBGIT2_VERSION'):
@@ -244,11 +244,11 @@ class GitCachedRepository(CachedRepository):
             for name in git_repos.listall_references():
                 ref = git_repos.lookup_reference(name)
                 git_object = git_repos[ref.target]
-                type_ = type(git_object)
-                if type_ is pygit2.Tag:
+                type_ = git_object.type
+                if type_ == GIT_OBJ_TAG:
                     git_object = git_repos[git_object.target]
-                    type_ = type(git_object)
-                if type_ is not pygit2.Commit or not git_object.parents:
+                    type_ = git_object.type
+                if type_ != GIT_OBJ_COMMIT or not git_object.parents:
                     continue
 
                 commit = git_object
@@ -956,10 +956,7 @@ class GitRepository(Repository):
         rev = self._stringify_rev(rev)
         if not rev:
             try:
-                head = git_repos.head
-                if type(head) is pygit2.Reference:
-                    head = git_repos.get(head.target)
-                return head
+                return git_repos.get(git_repos.head.target)
             except pygit2.GitError:
                 if raises:
                     raise NoSuchChangeset(rev)
@@ -1030,7 +1027,8 @@ class GitRepository(Repository):
                 pass
         return rev
 
-    display_rev = short_rev
+    def display_rev(self, rev):
+        return self.short_rev(rev)
 
     def get_node(self, path, rev=None):
         rev = self._stringify_rev(rev)
