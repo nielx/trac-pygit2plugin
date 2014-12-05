@@ -30,7 +30,8 @@ from tracext.pygit2 import git_fs
 
 REPOS_NAME = 'test.git'
 REPOS_URL = 'http://example.org/git/test.git'
-HEAD_REV = u'5fa8e424840c6c4dd331343550d870e6faafadf5'
+HEAD_REV = u'97553583461dd682de4db752f1e102fb19b019d8'
+HEAD_ABBREV = u'9755358'
 
 dumpfile_path = os.path.join(os.path.dirname(__file__), 'gitrepos.dump')
 repos_path = None
@@ -521,8 +522,6 @@ class NormalTestCase(object):
         self.assertEquals({'mode': '160000'}, node.get_properties())
         self.assertEquals([], list(node.get_entries()))
 
-    # TODO: GitNode.get_annotations(self):
-
     def test_oldest_rev(self):
         self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
                           self.repos.oldest_rev)
@@ -657,17 +656,43 @@ class NormalTestCase(object):
                          changes.next())
         self.assertRaises(StopIteration, changes.next)
 
-    def test_get_annotations(self):
+    def test_get_annotations_with_head(self):
+        expect = ['97553583461dd682de4db752f1e102fb19b019d8',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  '97553583461dd682de4db752f1e102fb19b019d8',
+                  '97553583461dd682de4db752f1e102fb19b019d8',
+                  '97553583461dd682de4db752f1e102fb19b019d8',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  'fc398de9939a675d6001f204c099215337d4eb24',
+                  '97553583461dd682de4db752f1e102fb19b019d8']
+        node = self.repos.get_node('/dir/sample.txt')
+        self.assertEquals(expect, node.get_annotations())
+        node = self.repos.get_node('/dir/sample.txt', HEAD_REV)
+        self.assertEquals(expect, node.get_annotations())
+        node = self.repos.get_node('/dir/sample.txt', HEAD_ABBREV)
+        self.assertEquals(expect, node.get_annotations())
+
+    def test_get_annotations_with_revision(self):
+        expected = ['fc398de9939a675d6001f204c099215337d4eb24'] * 9
         node = self.repos.get_node('/dir/sample.txt', '0ee9cfd')
-        annotations = node.get_annotations()
-        self.assertEquals(annotations,
-                    ['fc398de9939a675d6001f204c099215337d4eb24'] * 9)
+        self.assertEquals(expected, node.get_annotations())
+        node = self.repos.get_node('/dir/sample.txt',
+                                   '0ee9cfd6538b7b994b94a45ed173d9d45272b0c5')
+        self.assertEquals(expected, node.get_annotations())
 
     def test_get_annotations_unicode(self):
         node = self.repos.get_node(u'/root-tété.txt', 'fc398de')
-        annotations = node.get_annotations()
-        self.assertEquals(annotations,
-                    ['0ee9cfd6538b7b994b94a45ed173d9d45272b0c5'])
+        self.assertEquals(['fc398de9939a675d6001f204c099215337d4eb24'],
+                          node.get_annotations())
+        node = self.repos.get_node(u'/root-tété.txt',
+                                   'fc398de9939a675d6001f204c099215337d4eb24')
+        self.assertEquals(['fc398de9939a675d6001f204c099215337d4eb24'],
+                          node.get_annotations())
 
 
 def suite():
