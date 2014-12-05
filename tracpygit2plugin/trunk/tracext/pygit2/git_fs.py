@@ -12,18 +12,43 @@ from cStringIO import StringIO
 from datetime import datetime
 
 try:
-    import ctypes
-except ImportError:
-    ctypes = None
-try:
     import pygit2
 except ImportError:
     pygit2 = None
+    pygit2_version = None
+    libgit2_version = None
 else:
     from pygit2 import (
         GIT_OBJ_COMMIT, GIT_OBJ_TREE, GIT_OBJ_BLOB, GIT_OBJ_TAG,
         GIT_SORT_TIME, GIT_SORT_REVERSE,
     )
+    pygit2_version = pygit2.__version__
+    if hasattr(pygit2, 'LIBGIT2_VERSION'):
+        pygit2_version = '%s (compiled with libgit2 %s)' % \
+                         (pygit2_version, pygit2.LIBGIT2_VERSION)
+    try:
+        import ctypes
+    except ImportError:
+        ctypes = None
+        libgit2_version = None
+    else:
+        def _get_libgit2_version():
+            from ctypes import CDLL, CFUNCTYPE, POINTER, c_int, pointer
+            from ctypes.util import find_library
+            try:
+                if os.name == 'nt':
+                    sharedlib = CDLL('git2.dll')
+                else:
+                    sharedlib = CDLL(find_library('git2'))
+                prototype = CFUNCTYPE(None, POINTER(c_int), POINTER(c_int),
+                                      POINTER(c_int))
+                func = prototype(('git_libgit2_version', sharedlib))
+                args = [pointer(c_int(0)) for i in xrange(3)]
+                func(*args)
+                return '.'.join([str(arg[0]) for arg in args])
+            except:
+                return None
+        libgit2_version = _get_libgit2_version()
 
 from genshi.builder import tag
 
@@ -35,7 +60,7 @@ from trac.util.compat import any
 from trac.util.datefmt import (
     FixedOffset, format_datetime, to_timestamp, to_utimestamp, utc,
 )
-from trac.util.text import exception_to_unicode, to_unicode
+from trac.util.text import to_unicode
 from trac.util.translation import _, N_, tag_, gettext
 from trac.versioncontrol.api import (
     Changeset, Node, Repository, IRepositoryConnector, NoSuchChangeset,
@@ -436,37 +461,9 @@ class GitConnector(Component):
 
     def get_system_info(self):
         if pygit2:
-            pygit2_version = pygit2.__version__
-            if hasattr(pygit2, 'LIBGIT2_VERSION'):
-                pygit2_version = '%s (compiled with libgit2 %s)' % \
-                                 (pygit2_version, pygit2.LIBGIT2_VERSION)
             yield 'pygit2', pygit2_version
-            libgit2_version = self._get_libgit2_version()
             if libgit2_version:
                 yield 'libgit2', libgit2_version
-
-    if ctypes:
-        def _get_libgit2_version(self):
-            from ctypes import CDLL, CFUNCTYPE, POINTER, c_int, pointer
-            from ctypes.util import find_library
-            try:
-                if os.name == 'nt':
-                    sharedlib = CDLL('git2.dll')
-                else:
-                    sharedlib = CDLL(find_library('git2'))
-                prototype = CFUNCTYPE(None, POINTER(c_int), POINTER(c_int),
-                                      POINTER(c_int))
-                func = prototype(('git_libgit2_version', sharedlib))
-                args = [pointer(c_int(0)) for i in xrange(3)]
-                func(*args)
-                return '.'.join([str(arg[0]) for arg in args])
-            except Exception, e:
-                self.log.warn('Exception caught while retrieving libgit2 '
-                              'version%s',
-                              exception_to_unicode(e, traceback=True))
-    else:
-        def _get_libgit2_version(self):
-            pass
 
     # IWikiSyntaxProvider methods
 
