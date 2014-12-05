@@ -20,7 +20,7 @@ except ImportError:
 from trac.core import TracError
 from trac.test import EnvironmentStub, locate
 from trac.util.compat import close_fds
-from trac.util.datefmt import utc
+from trac.util.datefmt import parse_date, utc
 from trac.versioncontrol import DbRepositoryProvider, RepositoryManager
 from trac.versioncontrol.api import (
     Changeset, Node, NoSuchChangeset, NoSuchNode,
@@ -59,7 +59,9 @@ def setup_repository(env, path):
     provider = DbRepositoryProvider(env)
     provider.add_repository(REPOS_NAME, path, 'pygit2')
     provider.modify_repository(REPOS_NAME, {'url': REPOS_URL})
-    return env.get_repository(REPOS_NAME)
+    repos = env.get_repository(REPOS_NAME)
+    repos.sync()
+    return repos
 
 
 def rmtree(path):
@@ -108,11 +110,16 @@ class EmptyGitRepositoryTestSuite(GitRepositoryTestSuite):
     use_dump = False
 
 
-class EmptyTestCase(unittest.TestCase):
+class GitTestCaseSetup(object):
 
     def setUp(self):
         self.env = EnvironmentStub(enable=['trac.*', 'tracext.pygit2.*'])
-        self.repos = setup_repository(self.env, repos_path)
+        self.env.config.set('git', 'cached_repository',
+                            '01'[self.cached_repository])
+        self.repos = repos = setup_repository(self.env, repos_path)
+        if self.cached_repository:
+            repos = repos.repos
+        self.git_repos = repos.git_repos
 
     def tearDown(self):
         self.repos.close()
@@ -120,10 +127,13 @@ class EmptyTestCase(unittest.TestCase):
         RepositoryManager(self.env).reload_repositories()
         self.env.reset_db()
 
+
+class EmptyTestCase(object):
+
     def test_empty(self):
         if hasattr(pygit2.Repository, 'is_empty'):
-            self.assertEquals(True, self.repos.git_repos.is_empty)
-        self.assertRaises(pygit2.GitError, lambda: self.repos.git_repos.head)
+            self.assertEquals(True, self.git_repos.is_empty)
+        self.assertRaises(pygit2.GitError, lambda: self.git_repos.head)
 
     def test_get_quickjump_entries(self):
         entries = list(self.repos.get_quickjump_entries(None))
@@ -205,23 +215,12 @@ class EmptyTestCase(unittest.TestCase):
                           '/', 'fc398de', '/', '0ee9cfd')
 
 
-class NormalTestCase(unittest.TestCase):
-
-    def setUp(self):
-        self.env = EnvironmentStub(enable=['trac.*', 'tracext.pygit2.*'])
-        self.repos = setup_repository(self.env, repos_path)
-
-    def tearDown(self):
-        self.repos.close()
-        self.repos = None
-        RepositoryManager(self.env).reload_repositories()
-        self.env.reset_db()
+class NormalTestCase(object):
 
     def test_not_empty(self):
         if hasattr(pygit2.Repository, 'is_empty'):
-            self.assertEquals(False, self.repos.git_repos.is_empty)
-        self.assertEquals(pygit2.GIT_OBJ_COMMIT,
-                          self.repos.git_repos.head.type)
+            self.assertEquals(False, self.git_repos.is_empty)
+        self.assertEquals(pygit2.GIT_OBJ_COMMIT, self.git_repos.head.type)
 
     def test_linear_changesets(self):
         self.assertEquals(False, self.repos.has_linear_changesets)
@@ -275,7 +274,12 @@ class NormalTestCase(unittest.TestCase):
         self.assert_(isinstance(cset, Changeset), repr(cset))
         self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
                           cset.rev)
-        self.assertEquals('2013-02-14T23:01:25+09:00', cset.date.isoformat())
+        if self.cached_repository:
+            self.assertEquals(parse_date('2013-02-14T23:01:25+09:00'),
+                              cset.date)
+        else:
+            self.assertEquals('2013-02-14T23:01:25+09:00',
+                              cset.date.isoformat())
         self.assertEquals(u'Add some files\n', cset.message)
         self.assertEquals(u'Joé <joe@example.com>', cset.author)
 
@@ -302,7 +306,12 @@ class NormalTestCase(unittest.TestCase):
         self.assert_(isinstance(cset, Changeset), repr(cset))
         self.assertEquals(u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5',
                           cset.rev)
-        self.assertEquals('2013-02-15T01:02:07+09:00', cset.date.isoformat())
+        if self.cached_repository:
+            self.assertEquals(parse_date('2013-02-15T01:02:07+09:00'),
+                              cset.date)
+        else:
+            self.assertEquals('2013-02-15T01:02:07+09:00',
+                              cset.date.isoformat())
         self.assertEquals(u'delete, modify, rename, copy\n', cset.message)
         self.assertEquals(u'Joé <joe@example.com>', cset.author)
 
@@ -432,8 +441,12 @@ class NormalTestCase(unittest.TestCase):
         content = node.get_content().read()
         self.assertEquals(str, type(content))
         self.assertEquals(465, len(content))
-        self.assertEquals('2013-02-14T23:01:25+09:00',
-                          node.last_modified.isoformat())
+        if self.cached_repository:
+            self.assertEquals(parse_date('2013-02-14T23:01:25+09:00'),
+                              node.last_modified)
+        else:
+            self.assertEquals('2013-02-14T23:01:25+09:00',
+                              node.last_modified.isoformat())
         self.assertEquals({'mode': '100644'}, node.get_properties())
 
         node = self.repos.get_node(u'/āāā-file.txt', '0ee9cfd')
@@ -451,8 +464,12 @@ class NormalTestCase(unittest.TestCase):
         self.assertEquals(str, type(content))
         self.assertEquals(37, len(content))
         self.assertEquals('The directory has unicode characters\n', content)
-        self.assertEquals('2013-02-15T01:02:07+09:00',
-                          node.last_modified.isoformat())
+        if self.cached_repository:
+            self.assertEquals(parse_date('2013-02-15T01:02:07+09:00'),
+                              node.last_modified)
+        else:
+            self.assertEquals('2013-02-15T01:02:07+09:00',
+                              node.last_modified.isoformat())
         self.assertEquals({'mode': '100644'}, node.get_properties())
 
     def test_node_get_history(self):
@@ -660,10 +677,16 @@ def suite():
     if pygit2 and git_bin:
         repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
         os.rmdir(repos_path)
-        suite.addTest(unittest.makeSuite(
-            EmptyTestCase, 'test', suiteClass=EmptyGitRepositoryTestSuite))
-        suite.addTest(unittest.makeSuite(
-            NormalTestCase, 'test', suiteClass=GitRepositoryTestSuite))
+        for case_class, suite_class in (
+                (EmptyTestCase, EmptyGitRepositoryTestSuite),
+                (NormalTestCase, GitRepositoryTestSuite)):
+            for cached_repository in (False, True):
+                prefix = ('NonCached', 'Cached')[cached_repository]
+                tc = type(prefix + case_class.__name__,
+                          (case_class, GitTestCaseSetup, unittest.TestCase),
+                          {'cached_repository': cached_repository})
+                suite.addTest(unittest.makeSuite(tc, 'test',
+                                                 suiteClass=suite_class))
     else:
         print('SKIP: %s (no git binary installed)' % __name__)
     return suite
