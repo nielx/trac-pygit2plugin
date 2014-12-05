@@ -376,15 +376,13 @@ class GitCachedRepository(CachedRepository):
 
 
 class GitCachedChangeset(CachedChangeset):
-    """Git-specific cached changeset.
+    """Git-specific cached changeset."""
 
-    Handles get_branches() and get_tags()
-    """
     def get_branches(self):
-        return self.repos.repos.get_changeset(self.rev).get_branches()
+        return self.repos.repos._get_branches_cset(self.rev)
 
     def get_tags(self):
-        return self.repos.repos.get_changeset(self.rev).get_tags()
+        return self.repos.repos._get_tags_cset(self.rev)
 
 
 def intersperse(sep, iterable):
@@ -933,6 +931,26 @@ class GitRepository(Repository):
                       for name, ref, walker in self._iter_ref_walkers(rev)
                       if rev in walker)
 
+    def _get_branches_cset(self, rev):
+        return [(name, r == rev) for name, r in self._get_branches(rev)]
+
+    def _get_tags_cset(self, rev):
+        git_repos = self.git_repos
+        _from_fspath = self._from_fspath
+
+        def iter_tags():
+            for name in git_repos.listall_references():
+                if not name.startswith('refs/tags/'):
+                    continue
+                ref = git_repos.lookup_reference(name)
+                git_object = git_repos[ref.target]
+                if git_object.type == GIT_OBJ_TAG:
+                    git_object = git_repos[git_object.target]
+                if rev == git_object.hex:
+                    yield _from_fspath(name[10:])
+
+        return sorted(iter_tags())
+
     def _resolve_rev(self, rev, raises=True):
         git_repos = self.git_repos
         rev = self._stringify_rev(rev)
@@ -1397,25 +1415,10 @@ class GitChangeset(Changeset):
         Changeset.__init__(self, repos, rev, commit.message, author, date)
 
     def get_branches(self):
-        branches = self.repos._get_branches(self.rev)
-        return [(name, rev == self.rev) for name, rev in branches]
+        return self.repos._get_branches_cset(self.rev)
 
     def get_tags(self):
-        repos = self.repos
-        git_repos = repos.git_repos
-
-        def iter_tags():
-            for name in git_repos.listall_references():
-                if not name.startswith('refs/tags/'):
-                    continue
-                ref = git_repos.lookup_reference(name)
-                git_object = git_repos[ref.target]
-                if git_object.type == GIT_OBJ_TAG:
-                    git_object = git_repos[git_object.target]
-                if self.rev == git_object.hex:
-                    yield repos._from_fspath(name[10:])
-
-        return sorted(iter_tags())
+        return self.repos._get_tags_cset(self.rev)
 
     def get_properties(self):
         properties = {}
