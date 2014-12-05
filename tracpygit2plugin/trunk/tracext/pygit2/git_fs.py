@@ -217,9 +217,6 @@ class GitCachedRepository(CachedRepository):
             seen = set()
 
             for name in git_repos.listall_references():
-                if not name.startswith('refs/heads/') and \
-                        not name.startswith('refs/tags/'):
-                    continue
                 ref = git_repos.lookup_reference(name)
                 commit = git_repos[ref.target]
                 if not commit.parents:
