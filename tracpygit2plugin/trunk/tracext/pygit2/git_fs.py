@@ -29,17 +29,22 @@ from genshi.builder import tag
 
 from trac.config import BoolOption, IntOption, Option
 from trac.core import Component, implements, TracError
-from trac.env import ISystemInfoProvider
+from trac.env import Environment, ISystemInfoProvider
 from trac.util import shorten_line
 from trac.util.compat import any
-from trac.util.datefmt import utc, FixedOffset, to_timestamp, format_datetime
+from trac.util.datefmt import (
+    FixedOffset, format_datetime, to_timestamp, to_utimestamp, utc,
+)
 from trac.util.text import exception_to_unicode, to_unicode
 from trac.util.translation import _, N_, tag_, gettext
 from trac.versioncontrol.api import (
     Changeset, Node, Repository, IRepositoryConnector, NoSuchChangeset,
     NoSuchNode,
 )
-from trac.versioncontrol.cache import CachedRepository, CachedChangeset
+from trac.versioncontrol.cache import (
+    CACHE_METADATA_KEYS, CACHE_REPOSITORY_DIR, CACHE_YOUNGEST_REV,
+    CachedRepository, CachedChangeset,
+)
 from trac.versioncontrol.web_ui import IPropertyRenderer, RenderedProperty
 from trac.web.chrome import Chrome
 from trac.wiki import IWikiSyntaxProvider
@@ -92,24 +97,250 @@ else:
     _get_filemode = None
 
 
-class GitCachedRepository(CachedRepository):
-    """Git-specific cached repository.
+_inverted_kindmap = {Node.DIRECTORY: 'D', Node.FILE: 'F'}
+_inverted_actionmap = {Changeset.ADD: 'A', Changeset.COPY: 'C',
+                       Changeset.DELETE: 'D', Changeset.EDIT: 'E',
+                       Changeset.MOVE: 'M'}
 
-    Passes through {display,short,normalize}_rev
-    """
+
+if hasattr(Environment, 'db_exc'):
+    def _db_exc(env):
+        return env.db_exc
+else:
+    def _db_exc(env):
+        uri = env.config.get('trac', 'database', '')
+        if uri.startswith('sqlite:'):
+            from trac.db.sqlite_backend import sqlite
+            return sqlite
+        if uri.startswith('postgres:'):
+            from trac.db.postgres_backend import psycopg
+            return psycopg
+        if uri.startswith('mysql:'):
+            from trac.db.mysql_backend import MySQLdb
+            return MySQLdb
+        raise ValueError('Unsupported database "%s"' % uri.split(':')[0])
+
+
+class GitCachedRepository(CachedRepository):
+    """Git-specific cached repository."""
 
     has_linear_changesets = False
 
     def short_rev(self, rev):
         return self.repos.short_rev(rev)
 
-    display_rev = short_rev
+    def display_rev(self, rev):
+        return self.short_rev(rev)
 
     def normalize_rev(self, rev):
         return self.repos.normalize_rev(rev)
 
     def get_changeset(self, rev):
         return GitCachedChangeset(self, self.normalize_rev(rev), self.env)
+
+    def get_node(self, path, rev=None):
+        return self.repos.get_node(path, rev=rev)
+
+    def get_youngest_rev(self):
+        # return None if repository is empty
+        return CachedRepository.get_youngest_rev(self) or None
+
+    def get_quickjump_entries(self, rev):
+        try:
+            rev = self.normalize_rev(rev)
+        except NoSuchChangeset:
+            return ()
+        else:
+            return self.repos.get_quickjump_entries(rev)
+
+    def has_node(self, path, rev=None):
+        try:
+            self.get_node(path, rev=rev)
+        except (NoSuchChangeset, NoSuchNode):
+            return False
+        else:
+            return True
+
+    def parent_revs(self, rev):
+        return self.repos.parent_revs(rev)
+
+    def child_revs(self, rev):
+        return self.repos.child_revs(rev)
+
+    def sync(self, feedback=None, clean=False):
+        if clean:
+            self.remove_cache()
+
+        metadata = self.metadata
+        self.save_metadata(metadata)
+        meta_youngest = metadata.get(CACHE_YOUNGEST_REV, '')
+        repos = self.repos
+        git_repos = repos.git_repos
+
+        IntegrityError = _db_exc(self.env).IntegrityError
+
+        def is_synced(rev):
+            db = self.env.get_read_db()
+            cursor = db.cursor()
+            cursor.execute("SELECT COUNT(*) FROM revision "
+                           "WHERE repos=%s AND rev=%s",
+                           (self.id, rev))
+            for count, in cursor:
+                return count > 0
+            return False
+
+        def traverse(commit, seen, commits=None):
+            if commits is None:
+                commits = []
+            while True:
+                rev = commit.hex
+                if rev in seen:
+                    return commits
+                seen.add(rev)
+                if is_synced(rev):
+                    return commits
+                commits.append(commit)
+                parents = commit.parents
+                if not parents:
+                    return commits
+                if len(parents) == 1:
+                    commit = parents[0]
+                    continue
+                idx = len(commits)
+                traverse(parents.pop(), seen, commits)
+                for parent in parents:
+                    commits[idx:idx] = traverse(parent, seen)
+
+        while True:
+            repos_youngest = repos.youngest_rev or ''
+            updated = [False]
+            seen = set()
+
+            for name in git_repos.listall_references():
+                if not name.startswith('refs/heads/') and \
+                        not name.startswith('refs/tags/'):
+                    continue
+                ref = git_repos.lookup_reference(name)
+                commit = git_repos[ref.target]
+                if not commit.parents:
+                    continue
+                rev = commit.hex
+                commits = traverse(commit, seen)  # topology ordered
+                while commits:
+                    # sync revision from older revision to newer revision
+                    commit = commits.pop()
+                    rev = commit.hex
+                    self.log.info("Trying to sync revision [%s]", rev)
+                    cset = GitChangeset(repos, commit)
+                    @self.env.with_transaction()
+                    def do_insert(db):
+                        try:
+                            self._insert_changeset(db, rev, cset)
+                            updated[0] = True
+                        except IntegrityError, e:
+                            self.log.info('Revision %s already cached: %r',
+                                          rev, e)
+                            db.rollback()
+                    if feedback:
+                        feedback(rev)
+
+            if updated[0]:
+                continue  # sync again
+
+            if meta_youngest != repos_youngest:
+                @self.env.with_transaction()
+                def update_metadata(db):
+                    cursor = db.cursor()
+                    cursor.execute("""
+                        UPDATE repository SET value=%s WHERE id=%s AND name=%s
+                        """, (repos_youngest, self.id, CACHE_YOUNGEST_REV))
+                    del self.metadata
+            return
+
+    if not hasattr(CachedChangeset, 'remove_cache'):
+        def remove_cache(self):
+            self.log.info("Cleaning cache")
+            @self.env.with_transaction()
+            def fn(db):
+                cursor = db.cursor()
+                cursor.execute("DELETE FROM revision WHERE repos=%s",
+                               (self.id,))
+                cursor.execute("DELETE FROM node_change WHERE repos=%s",
+                               (self.id,))
+                cursor.executemany(
+                    "DELETE FROM repository WHERE id=%s AND name=%s",
+                    [(self.id, k) for k in CACHE_METADATA_KEYS])
+                cursor.executemany("""
+                    INSERT INTO repository (id, name, value)
+                    VALUES (%s, %s, %s)
+                    """, [(self.id, k, '') for k in CACHE_METADATA_KEYS])
+                del self.metadata
+
+    if not hasattr(CachedChangeset, 'save_metadata'):
+        def save_metadata(self, metadata):
+            @self.env.with_transaction()
+            def fn(db):
+                invalidate = False
+                cursor = db.cursor()
+
+                # -- check that we're populating the cache for the correct
+                #    repository
+                repository_dir = metadata.get(CACHE_REPOSITORY_DIR)
+                if repository_dir:
+                    # directory part of the repo name can vary on case
+                    # insensitive fs
+                    if os.path.normcase(repository_dir) \
+                            != os.path.normcase(self.name):
+                        self.log.info("'repository_dir' has changed from %r "
+                                      "to %r", repository_dir, self.name)
+                        raise TracError(_(
+                            "The repository directory has changed, you should "
+                            "resynchronize the repository with: trac-admin "
+                            "$ENV repository resync '%(reponame)s'",
+                            reponame=self.reponame or '(default)'))
+                elif repository_dir is None: #
+                    self.log.info('Storing initial "repository_dir": %s',
+                                  self.name)
+                    cursor.execute("INSERT INTO repository (id, name, value) "
+                                   "VALUES (%s, %s, %s)",
+                                   (self.id, CACHE_REPOSITORY_DIR, self.name))
+                    invalidate = True
+                else: # 'repository_dir' cleared by a resync
+                    self.log.info('Resetting "repository_dir": %s', self.name)
+                    cursor.execute("UPDATE repository SET value=%s "
+                                   "WHERE id=%s AND name=%s",
+                                   (self.name, self.id, CACHE_REPOSITORY_DIR))
+                    invalidate = True
+
+                # -- insert a 'youngeset_rev' for the repository if necessary
+                if CACHE_YOUNGEST_REV not in metadata:
+                    cursor.execute("INSERT INTO repository (id, name, value) "
+                                   "VALUES (%s, %s, %s)",
+                                   (self.id, CACHE_YOUNGEST_REV, ''))
+                    invalidate = True
+
+                if invalidate:
+                    del self.metadata
+
+    def _insert_changeset(self, db, rev, cset):
+        cursor = db.cursor()
+        srev = self.db_rev(rev)
+        cursor.execute("""
+            INSERT INTO revision (repos,rev,time,author,message)
+            VALUES (%s,%s,%s,%s,%s)
+            """, (self.id, srev, to_utimestamp(cset.date),
+                  cset.author, cset.message))
+        for path, kind, action, bpath, brev in cset.get_changes():
+            self.log.debug("Caching node change in [%s]: %r", rev,
+                           (path, kind, action, bpath, brev))
+            kind = _inverted_kindmap[kind]
+            action = _inverted_actionmap[action]
+            cursor.execute("""
+                INSERT INTO node_change
+                    (repos,rev,path,node_type,change_type,base_path,
+                     base_rev)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                """, (self.id, srev, path, kind, action, bpath, brev))
 
 
 class GitCachedChangeset(CachedChangeset):
