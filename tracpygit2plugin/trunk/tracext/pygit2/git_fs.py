@@ -417,6 +417,8 @@ def _walk_tree(repos, tree, path=None):
         else:
             name = entry.name
         git_object = repos.get(entry.oid)
+        if git_object is None:
+            continue
         if git_object.type == GIT_OBJ_TREE:
             for val in _walk_tree(repos, git_object, name):
                 yield val
