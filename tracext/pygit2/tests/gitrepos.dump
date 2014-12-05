@@ -41,9 +41,9 @@ data 15
 Add some files
 M 100644 :1 .gitignore
 M 100644 :2 dir/sample.txt
-M 100644 :3 dir/tété.txt
-M 100644 :4 root-tété.txt
-M 100644 :5 āāā/file.txt
+M 100644 :3 "dir/t\303\251t\303\251.txt"
+M 100644 :4 "root-t\303\251t\303\251.txt"
+M 100644 :5 "\304\201\304\201\304\201/file.txt"
 
 blob
 mark :7
@@ -62,13 +62,13 @@ committer Joé <joe@example.com> 1360857727 +0900
 data 29
 delete, modify, rename, copy
 from :6
-D dir/tété.txt
+D "dir/t\303\251t\303\251.txt"
 M 100644 :7 dir2/simple-another.txt
 M 100644 :7 dir2/simple.txt
 M 100644 :2 root-sample.txt
-M 100644 :8 root-tété.txt
-M 100644 :5 āāā-file.txt
-D āāā/file.txt
+M 100644 :8 "root-t\303\251t\303\251.txt"
+M 100644 :5 "\304\201\304\201\304\201-file.txt"
+D "\304\201\304\201\304\201/file.txt"
 
 blob
 mark :10
@@ -87,15 +87,41 @@ from :9
 M 100644 :10 .gitmodules
 M 160000 0ee9cfd6538b7b994b94a45ed173d9d45272b0c5 submod
 
-reset refs/heads/master
+blob
+mark :12
+data 660
++-----------------------------------------------------------
+> Lorem ipsum dolor sit amet, consectetur adipisicing elit,
+| sed do eiusmod tempor incididunt ut labore et dolore
+| magna aliqua. Ut enim ad minim veniam, quis nostrud
+| exercitation ullamco laboris nisi ut aliquip ex ea
+| commodo consequat. Duis aute irure dolor in reprehenderit
+| in voluptate velit esse cillum dolore eu fugiat nulla
+| pariatur.
++-----------------------------------------------------------
+>           Excepteur sint occaecat cupidatat non proident,
+| sunt in culpa qui officia deserunt mollit anim id est
+| laborum.
++-----------------------------------------------------------
+
+commit refs/heads/develöp
+mark :13
+author Joé <joe@example.com> 1417779905 +0900
+committer Joé <joe@example.com> 1417779905 +0900
+data 24
+modified dir/sample.txt
 from :11
+M 100644 :12 dir/sample.txt
+
+reset refs/heads/master
+from :13
 
 reset refs/tags/vér0.1
 from :6
 
 reset refs/heads/stâble
-from :11
+from :13
 
 reset refs/heads/master
-from :11
+from :13
 
