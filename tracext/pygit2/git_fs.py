@@ -52,7 +52,6 @@ else:
 
 from genshi.builder import tag
 
-from trac.config import BoolOption, IntOption, Option
 from trac.core import Component, implements, TracError
 from trac.env import Environment, ISystemInfoProvider
 from trac.util import shorten_line
@@ -61,7 +60,6 @@ from trac.util.datefmt import (
     FixedOffset, format_datetime, to_timestamp, to_utimestamp, utc,
 )
 from trac.util.text import to_unicode
-from trac.util.translation import _, N_, tag_, gettext
 from trac.versioncontrol.api import (
     Changeset, Node, Repository, IRepositoryConnector, NoSuchChangeset,
     NoSuchNode,
@@ -93,6 +91,10 @@ except ImportError:
         from tracext.git.git_fs import GitConnector as TracGitConnector
     except ImportError:
         TracGitConnector = None
+
+from tracext.pygit2.translation import (
+    BoolOption, IntOption, Option, N_, _, gettext, tag_,
+)
 
 
 __all__ = ['GitCachedRepository', 'GitCachedChangeset', 'GitConnector',
@@ -543,34 +545,30 @@ class GitConnector(Component):
             return TracGitConnector(self.env).git_fs_encoding
     else:
         cached_repository = BoolOption('git', 'cached_repository', 'false',
-            """Wrap `GitRepository` in `CachedRepository`.""")
+            N_("Wrap `GitRepository` in `CachedRepository`."))
 
         shortrev_len = IntOption('git', 'shortrev_len', 7,
-            """The length at which a sha1 should be abbreviated to (must
-            be >= 4 and <= 40).
-            """)
+            N_("The length at which a sha1 should be abbreviated to (must be "
+               ">= 4 and <= 40)."))
 
         wiki_shortrev_len = IntOption('git', 'wikishortrev_len', 40,
-            """The minimum length of an hex-string for which
-            auto-detection as sha1 is performed (must be >= 4 and <= 40).
-            """)
+            N_("The minimum length of an hex-string for which auto-detection "
+               "as sha1 is performed (must be >= 4 and <= 40)."))
 
         trac_user_rlookup = BoolOption('git', 'trac_user_rlookup', 'false',
-            """Enable reverse mapping of git email addresses to trac user ids
-            (costly if you have many users).""")
+            N_("Enable reverse mapping of git email addresses to trac user "
+               "ids (costly if you have many users)."))
 
         use_committer_id = BoolOption('git', 'use_committer_id', 'true',
-            """Use git-committer id instead of git-author id for the
-            changeset ''Author'' field.
-            """)
+            N_("Use git-committer id instead of git-author id for the "
+               "changeset ''Author'' field."))
 
         use_committer_time = BoolOption('git', 'use_committer_time', 'true',
-            """Use git-committer timestamp instead of git-author timestamp
-            for the changeset ''Timestamp'' field.
-            """)
+            N_("Use git-committer timestamp instead of git-author timestamp "
+               "for the changeset ''Timestamp'' field."))
 
         git_fs_encoding = Option('git', 'git_fs_encoding', 'utf-8',
-            """Define charset encoding of paths within git repositories.""")
+            N_("Define charset encoding of paths within git repositories."))
 
     # IRepositoryConnector methods
 
