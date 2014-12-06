@@ -1,0 +1,115 @@
+# Translations template for TracPygit2Plugin.
+# Copyright (C) 2014 ORGANIZATION
+# This file is distributed under the same license as the
+# TracPygit2Plugin project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2014.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: TracPygit2Plugin 0.12.0.1\n"
+"Report-Msgid-Bugs-To: jun66j5@gmail.com\n"
+"POT-Creation-Date: 2014-12-06 16:31+0900\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 0.9.6\n"
+
+#: tracext/pygit2/git_fs.py:326
+#, python-format
+msgid ""
+"The repository directory has changed, you should resynchronize the "
+"repository with: trac-admin $ENV repository resync '%(reponame)s'"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:548
+msgid "Wrap `GitRepository` in `CachedRepository`."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:551
+msgid ""
+"The length at which a sha1 should be abbreviated to (must be >= 4 and"
+" <= 40)."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:555
+msgid ""
+"The minimum length of an hex-string for which auto-detection as sha1 "
+"is performed (must be >= 4 and <= 40)."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:559
+msgid ""
+"Enable reverse mapping of git email addresses to trac user ids "
+"(costly if you have many users)."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:563
+msgid ""
+"Use git-committer id instead of git-author id for the changeset "
+"''Author'' field."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:567
+msgid ""
+"Use git-committer timestamp instead of git-author timestamp for the "
+"changeset ''Timestamp'' field."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:571
+msgid "Define charset encoding of paths within git repositories."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:587
+msgid "[git] shortrev_len setting must be within [4..40]"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:591
+msgid "[git] wikishortrev_len must be within [4..40]"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:637
+msgid "Parents:"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:637
+msgid "Children:"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:637
+msgid "Branches:"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:637
+msgid "Tags:"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:700
+msgid "diff"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:702
+msgid ""
+"Diff against this parent (show the changes merged from the other "
+"parents)"
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:708
+msgid ""
+"'''Note''': this is a '''merge''' changeset, the changes displayed "
+"below correspond to the merge itself. Use the `(diff)` links above to"
+" see all the changes relative to each parent."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:751
+#, python-format
+msgid "%(path)s does not appear to be a Git repository."
+msgstr ""
+
+#: tracext/pygit2/git_fs.py:1182
+msgid "GitRepository does not support path_history"
+msgstr ""
+
