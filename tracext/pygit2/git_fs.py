@@ -418,13 +418,15 @@ def _format_signature(signature):
 
 def _walk_tree(repos, tree, path=None):
     for entry in tree:
+        if _get_filemode(entry) == SUBMODULE_FILEMODE:
+            continue
+        git_object = repos.get(entry.oid)
+        if git_object is None:
+            continue
         if path is not None:
             name = posixpath.join(path, entry.name)
         else:
             name = entry.name
-        git_object = repos.get(entry.oid)
-        if git_object is None:
-            continue
         if git_object.type == GIT_OBJ_TREE:
             for val in _walk_tree(repos, git_object, name):
                 yield val
