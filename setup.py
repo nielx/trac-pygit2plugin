@@ -33,13 +33,15 @@ def main():
     except ImportError:
         pass
     else:
-        kwargs['message_extractors'] = {
-            'tracext': [
-                ('**.py', 'python', None),
-                ('**.html', 'genshi', None),
-            ],
-        }
-        kwargs['cmdclass'] = get_l10n_cmdclass()
+        from glob import glob
+        if glob('tracext/pygit2/locale/*/LC_MESSAGES/*.po'):
+            kwargs['message_extractors'] = {
+                'tracext': [
+                    ('**.py', 'python', None),
+                    ('**.html', 'genshi', None),
+                ],
+            }
+            kwargs['cmdclass'] = get_l10n_cmdclass()
 
     setup(**kwargs)
 
