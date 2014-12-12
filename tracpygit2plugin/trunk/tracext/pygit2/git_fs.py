@@ -203,11 +203,11 @@ class GitCachedRepository(CachedRepository):
         meta_youngest = metadata.get(CACHE_YOUNGEST_REV, '')
         repos = self.repos
         git_repos = repos.git_repos
+        db = self.env.get_read_db()
 
         IntegrityError = _db_exc(self.env).IntegrityError
 
         def is_synced(rev):
-            db = self.env.get_read_db()
             cursor = db.cursor()
             cursor.execute("SELECT COUNT(*) FROM revision "
                            "WHERE repos=%s AND rev=%s",
@@ -253,9 +253,7 @@ class GitCachedRepository(CachedRepository):
                 if type_ != GIT_OBJ_COMMIT or not git_object.parents:
                     continue
 
-                commit = git_object
-                rev = commit.hex
-                commits = traverse(commit, seen)  # topology ordered
+                commits = traverse(git_object, seen)  # topology ordered
                 while commits:
                     # sync revision from older revision to newer revision
                     commit = commits.pop()
