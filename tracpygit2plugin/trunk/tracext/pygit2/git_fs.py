@@ -576,10 +576,10 @@ class GitConnector(Component):
 
     def get_supported_types(self):
         if pygit2:
-            yield ('git', 9)  # higher priority than tracopt.v.git
-            yield ('pygit2', 8)
-            yield ('direct-pygit2', 8)
-            yield ('cached-pygit2', 8)
+            yield 'git', 4  # lower priority than tracopt.v.git
+            yield 'pygit2', 8
+            yield 'direct-pygit2', 8
+            yield 'cached-pygit2', 8
 
     def get_repository(self, type, dir, params):
         """GitRepository factory method"""
