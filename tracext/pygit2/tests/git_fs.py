@@ -123,9 +123,15 @@ class GitTestCaseSetup(object):
         self.git_repos = repos.git_repos
 
     def tearDown(self):
+        self.git_repos = None
         self.repos.close()
         self.repos = None
         RepositoryManager(self.env).reload_repositories()
+        if self.env.dburi == 'sqlite::memory:':
+            # workaround to avoid "OperationalError: no such table: repository"
+            # on Trac 1.0+ with sqlite::memory:
+            import gc
+            gc.collect()
         self.env.reset_db()
 
 
