@@ -334,9 +334,8 @@ class NormalTestCase(object):
                            None, None),
                           changes.next())
         # Copy root-sample.txt <- dir/sample.txt
-        self.assertEquals((u'root-sample.txt', Node.FILE, Changeset.COPY,
-                           u'dir/sample.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24'),
+        self.assertEquals((u'root-sample.txt', Node.FILE, Changeset.ADD,
+                           None, None),
                           changes.next())
         self.assertEquals((u'root-tété.txt', Node.FILE, Changeset.EDIT,
                            u'root-tété.txt',
@@ -650,8 +649,7 @@ class NormalTestCase(object):
         self._cmp_change((None, u'dir2/simple.txt', Node.FILE, Changeset.ADD),
                          changes.next())
         # Copy root-sample.txt <- dir/sample.txt
-        self._cmp_change((u'dir/sample.txt', u'root-sample.txt', Node.FILE,
-                          Changeset.COPY),
+        self._cmp_change((None, u'root-sample.txt', Node.FILE, Changeset.ADD),
                          changes.next())
         self._cmp_change((u'root-tété.txt', u'root-tété.txt', Node.FILE,
                           Changeset.EDIT),

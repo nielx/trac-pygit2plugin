@@ -100,27 +100,19 @@ from tracext.pygit2.translation import (
 __all__ = ['GitCachedRepository', 'GitCachedChangeset', 'GitConnector',
            'GitRepository', 'GitChangeset', 'GitNode']
 
-GIT_DELTA_ADDED = 'A'
-GIT_DELTA_DELETED = 'D'
-GIT_DELTA_MODIFIED = 'M'
-GIT_DELTA_RENAMED = 'R'
-GIT_DELTA_COPIED = 'C'
-SUBMODULE_FILEMODE = 0160000
+_filemode_submodule = 0160000
+_diff_find_rename_limit = 200
 
 if pygit2:
-    _DELTA_STATUS_MAP = {
-        GIT_DELTA_ADDED:    Changeset.ADD,
-        GIT_DELTA_DELETED:  Changeset.DELETE,
-        GIT_DELTA_MODIFIED: Changeset.EDIT,
-        GIT_DELTA_RENAMED:  Changeset.MOVE,
-        GIT_DELTA_COPIED:   Changeset.COPY,
-    }
+    _status_map = {'A': Changeset.ADD, 'D': Changeset.DELETE,
+                   'M': Changeset.EDIT, 'R': Changeset.MOVE,
+                   'C': Changeset.COPY}
     if hasattr(pygit2.TreeEntry, 'filemode'):
         _get_filemode = lambda tree_entry: tree_entry.filemode
     else:
         _get_filemode = lambda tree_entry: tree_entry.attributes
 else:
-    _DELTA_STATUS_MAP = {}
+    _status_map = {}
     _get_filemode = None
 
 
@@ -416,7 +408,7 @@ def _format_signature(signature):
 
 def _walk_tree(repos, tree, path=None):
     for entry in tree:
-        if _get_filemode(entry) == SUBMODULE_FILEMODE:
+        if _get_filemode(entry) == _filemode_submodule:
             continue
         git_object = repos.get(entry.oid)
         if git_object is None:
@@ -855,74 +847,18 @@ class GitRepository(Repository):
                 continue
             yield self._from_fspath(name), ref, walker
 
-    if not pygit2:
-        def _iter_changes_of_diff(self, diff):
-            return ()
-    elif hasattr(pygit2.Diff, '__iter__'):  # v0.18.0 or later
-        def _iter_changes_of_diff(self, diff):
-            for patch in diff:
-                yield patch.old_file_path, patch.new_file_path, patch.status
-    else:
-        def _iter_changes_of_diff(self, diff):
-            for change in diff.changes.get('files', ()):
-                yield change[0], change[1], change[2]
-
     def _get_changes(self, parent_tree, commit_tree):
-        _get_tree_entry = self._get_tree_entry
-        files = []
-        added_oids = {}
-        deleted_oids = {}
-        parent_oids = {}
         diff = parent_tree.diff_to_tree(commit_tree)
-
-        for change in self._iter_changes_of_diff(diff):
-            old = change[0]
-            new = change[1]
-            status = change[2]
-            if status == GIT_DELTA_ADDED:
-                entry = _get_tree_entry(commit_tree, new)
-                added_oids.setdefault(entry.oid, []).append(new)
-            elif status == GIT_DELTA_DELETED:
-                entry = _get_tree_entry(parent_tree, old)
-                deleted_oids.setdefault(entry.oid, []).append(old)
-            else:
-                files.append((old, new, status))
-
-        if added_oids:
-            for git_object, name in _walk_tree(self.git_repos, parent_tree):
-                parent_oids.setdefault(git_object.oid, []).append(name)
-
-        for oids in (added_oids, deleted_oids, parent_oids):
-            for paths in oids.itervalues():
-                paths.sort(reverse=True)
-
-        # Handle copying and renaming files
-        for oid, added_paths in added_oids.iteritems():
-            deleted_paths = deleted_oids.get(oid, ())
-            parent_paths = parent_oids.get(oid, ())
-            while added_paths:
-                added_path = added_paths[-1]
-                if deleted_paths:
-                    files.append((deleted_paths.pop(), added_path,
-                                  GIT_DELTA_RENAMED))
-                elif parent_paths:
-                    files.append((parent_paths.pop(), added_path,
-                                  GIT_DELTA_COPIED))
-                else:
-                    break
-                added_paths.pop()
-
-        files.extend((path, path, GIT_DELTA_ADDED)
-                     for added_paths in added_oids.itervalues()
-                     for path in added_paths)
-        files.extend((path, path, GIT_DELTA_DELETED)
-                     for deleted_paths in deleted_oids.itervalues()
-                     for path in deleted_paths)
-
+        # don't detect rename if the diff has too many files
+        if len(diff) <= _diff_find_rename_limit or \
+                sum(patch.status == 'A'
+                    for patch in diff) <= _diff_find_rename_limit:
+            diff.find_similar()
         _from_fspath = self._from_fspath
-        return sorted(((_from_fspath(old), _from_fspath(new), status)
-                       for old, new, status in files),
-                      key=lambda change: change[1])
+        generator = ((_from_fspath(patch.old_file_path),
+                      _from_fspath(patch.new_file_path), patch.status)
+                     for patch in diff if patch.status in _status_map)
+        return sorted(generator, key=lambda item: item[1])
 
     def _get_branches(self, rev):
         return sorted((name[11:], ref.target.hex)
@@ -1100,14 +1036,14 @@ class GitRepository(Repository):
 
             for old_file, new_file, status in \
                     self._get_changes(old_tree, new_tree):
-                action = _DELTA_STATUS_MAP.get(status)
+                action = _status_map.get(status)
                 if not action:
                     continue
                 old_node = new_node = None
-                if status != GIT_DELTA_ADDED:
+                if status != 'A':
                     old_node = self.get_node(
                                 posixpath.join(old_path, old_file), old_rev)
-                if status != GIT_DELTA_DELETED:
+                if status != 'D':
                     new_node = self.get_node(
                                 posixpath.join(new_path, new_file), new_rev)
                 yield old_node, new_node, Node.FILE, action
@@ -1212,12 +1148,12 @@ class GitNode(Node):
                 if tree_entry is None:
                     raise NoSuchNode(path, rev)
                 filemode = _get_filemode(tree_entry)
-                if filemode == SUBMODULE_FILEMODE:
+                if filemode == _filemode_submodule:
                     git_object = None
                 else:
                     git_object = repos.git_repos.get(tree_entry.oid)
             if git_object is None:
-                if filemode == SUBMODULE_FILEMODE:
+                if filemode == _filemode_submodule:
                     kind = Node.DIRECTORY
                 else:
                     kind = None
@@ -1450,17 +1386,17 @@ class GitChangeset(Changeset):
             files = self.repos._get_changes(parent.tree, commit.tree)
         else:
             _from_fspath = self.repos._from_fspath
-            files = sorted(((None, _from_fspath(name), GIT_DELTA_ADDED)
+            files = sorted(((None, _from_fspath(name), 'A')
                             for git_object, name in _walk_tree(
                                         self.repos.git_repos, commit.tree)),
                            key=lambda change: change[1])
             parent_rev = None
 
         for old_path, new_path, status in files:
-            action = _DELTA_STATUS_MAP.get(status)
+            action = _status_map.get(status)
             if not action:
                 continue
-            if status == GIT_DELTA_ADDED:
+            if status == 'A':
                 yield new_path, Node.FILE, action, None, None
             else:
                 yield new_path, Node.FILE, action, old_path, parent_rev
