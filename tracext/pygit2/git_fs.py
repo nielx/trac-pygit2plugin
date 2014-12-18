@@ -16,7 +16,6 @@ try:
 except ImportError:
     pygit2 = None
     pygit2_version = None
-    libgit2_version = None
 else:
     from pygit2 import (
         GIT_OBJ_BLOB, GIT_OBJ_COMMIT, GIT_OBJ_TAG, GIT_OBJ_TREE,
@@ -26,29 +25,6 @@ else:
     if hasattr(pygit2, 'LIBGIT2_VERSION'):
         pygit2_version = '%s (compiled with libgit2 %s)' % \
                          (pygit2_version, pygit2.LIBGIT2_VERSION)
-    try:
-        import ctypes
-    except ImportError:
-        ctypes = None
-        libgit2_version = None
-    else:
-        def _get_libgit2_version():
-            from ctypes import CDLL, CFUNCTYPE, POINTER, c_int, pointer
-            from ctypes.util import find_library
-            try:
-                if os.name == 'nt':
-                    sharedlib = CDLL('git2.dll')
-                else:
-                    sharedlib = CDLL(find_library('git2'))
-                prototype = CFUNCTYPE(None, POINTER(c_int), POINTER(c_int),
-                                      POINTER(c_int))
-                func = prototype(('git_libgit2_version', sharedlib))
-                args = [pointer(c_int(0)) for i in xrange(3)]
-                func(*args)
-                return '.'.join([str(arg[0]) for arg in args])
-            except:
-                return None
-        libgit2_version = _get_libgit2_version()
 
 from genshi.builder import tag
 
@@ -466,8 +442,6 @@ class GitConnector(Component):
     def get_system_info(self):
         if pygit2:
             yield 'pygit2', pygit2_version
-            if libgit2_version:
-                yield 'libgit2', libgit2_version
 
     # IWikiSyntaxProvider methods
 
