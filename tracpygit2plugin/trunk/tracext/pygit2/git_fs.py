@@ -662,12 +662,12 @@ class CsetPropertyRenderer(Component):
         href = context.href
 
         def parent_diff(rev):
-            rev = self._changeset_link(context, rev)
+            link = self._changeset_link(context, rev)
             diff = tag.a(_("diff"),
                          href=href.changeset(curr_rev, reponame, old=rev),
                          title=_("Diff against this parent (show the changes "
                                  "merged from the other parents)"))
-            return tag_("%(rev)s (%(diff)s)", rev=rev, diff=diff)
+            return tag_("%(rev)s (%(diff)s)", rev=link, diff=diff)
 
         links = intersperse(', ', map(parent_diff, revs))
         hint = wiki_to_oneliner(
