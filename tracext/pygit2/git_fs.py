@@ -759,7 +759,7 @@ class GitRepository(Repository):
             path = self._to_fspath(path)
         entry = tree
         for name in path.split('/'):
-            if name not in tree:
+            if tree is None or tree.type != GIT_OBJ_TREE or name not in tree:
                 return None
             entry = tree[name]
             tree = self.git_repos.get(entry.oid)
