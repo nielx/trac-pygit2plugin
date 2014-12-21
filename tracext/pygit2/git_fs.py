@@ -87,9 +87,11 @@ if pygit2:
         _get_filemode = lambda tree_entry: tree_entry.filemode
     else:
         _get_filemode = lambda tree_entry: tree_entry.attributes
+    _walk_flags = GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME
 else:
     _status_map = {}
     _get_filemode = None
+    _walk_flags = 0
 
 
 _inverted_kindmap = {Node.DIRECTORY: 'D', Node.FILE: 'F'}
@@ -800,7 +802,7 @@ class GitRepository(Repository):
             if not commit:
                 continue
             walkers[name] = _cached_walker(git_repos.walk(commit.oid,
-                                                          GIT_SORT_TIME))
+                                                          _walk_flags))
         self._ref_walkers = walkers
         return walkers
 
@@ -907,8 +909,8 @@ class GitRepository(Repository):
             self.git_repos.head
         except pygit2.GitError:
             return None
-        sort = GIT_SORT_TIME | GIT_SORT_REVERSE
-        for commit in self.git_repos.walk(self.git_repos.head.target, sort):
+        for commit in self.git_repos.walk(self.git_repos.head.target,
+                                          _walk_flags | GIT_SORT_REVERSE):
             return commit.hex
 
     def normalize_path(self, path):
@@ -977,8 +979,7 @@ class GitRepository(Repository):
                 if not name.startswith('refs/heads/'):
                     continue
                 ref = git_repos.lookup_reference(name)
-                for commit in git_repos.walk(ref.target,
-                                             GIT_SORT_TIME):
+                for commit in git_repos.walk(ref.target, _walk_flags):
                     ts = commit.commit_time
                     if ts < ts_start:
                         break
@@ -1086,7 +1087,7 @@ class GitRepository(Repository):
         oid1 = self._resolve_rev(rev1).oid
         oid2 = self._resolve_rev(rev2).oid
         return any(oid2 == c.oid
-                   for c in self.git_repos.walk(oid1, GIT_SORT_TIME))
+                   for c in self.git_repos.walk(oid1, _walk_flags))
 
     def get_path_history(self, path, rev=None, limit=None):
         raise TracError(_("GitRepository does not support path_history"))
@@ -1176,25 +1177,26 @@ class GitNode(Node):
         _get_tree = self.repos._get_tree
         path = self.repos._to_fspath(path)
         commit = None
-        for commit in self.repos.git_repos.walk(rev, GIT_SORT_TIME):
+        for commit in self.repos.git_repos.walk(rev, _walk_flags):
             tree = _get_tree(commit.tree, path)
-            for parent in commit.parents:
-                parent_tree = _get_tree(parent.tree, path)
-                action = None
-                if tree is parent_tree is None:
-                    return
-                if tree is None:
-                    action = Changeset.DELETE
-                elif parent_tree is None:
-                    action = Changeset.ADD
-                elif parent_tree.oid != tree.oid:
-                    action = Changeset.EDIT
-                else:
-                    continue
-                yield commit, action
+            parents = commit.parents
+            if not parents:
+                if tree is not None:
+                    yield commit, Changeset.ADD
                 break
-        if commit and not commit.parents:
-            yield commit, Changeset.ADD
+            parent_tree = _get_tree(parents[0].tree, path)
+            action = None
+            if tree is parent_tree is None:
+                return
+            if tree is None:
+                action = Changeset.DELETE
+            elif parent_tree is None:
+                action = Changeset.ADD
+            elif parent_tree.oid != tree.oid:
+                action = Changeset.EDIT
+            else:
+                continue
+            yield commit, action
 
     def get_content(self):
         if not self.isfile:
@@ -1235,8 +1237,7 @@ class GitNode(Node):
 
         def get_commits():
             commits = {}
-            for commit in repos.git_repos.walk(self.rev, GIT_SORT_TOPOLOGICAL |
-                                                         GIT_SORT_TIME):
+            for commit in repos.git_repos.walk(self.rev, _walk_flags):
                 parents = commit.parents
                 if not parents:
                     break
