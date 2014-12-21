@@ -1157,10 +1157,21 @@ class GitNode(Node):
 
     def _get_created_commit(self):
         commit = self._created_commit
-        if commit is None:
-            for commit, action in self._walk_commits(self.rev):
-                self._created_commit = commit
-                break
+        if commit is None and self.commit and self.rev:
+            _get_tree = self.repos._get_tree
+            path = self.repos._to_fspath(self.path)
+            commit = self.commit
+            tree = _get_tree(commit.tree, path)
+            parents = commit.parents
+            if parents:
+                parent_tree = _get_tree(parents[0].tree, path)
+                if parent_tree is not None and parent_tree.oid == tree.oid:
+                    commit = None
+                    for commit, action in self._walk_commits(self.rev):
+                        break
+            if not commit:
+                commit = self.commit
+            self._created_commit = commit
         return commit
 
     @property
@@ -1176,15 +1187,19 @@ class GitNode(Node):
 
         _get_tree = self.repos._get_tree
         path = self.repos._to_fspath(path)
-        commit = None
+        parent = parent_tree = None
         for commit in self.repos.git_repos.walk(rev, _walk_flags):
-            tree = _get_tree(commit.tree, path)
+            if parent is not None and parent.oid == commit.oid:
+                tree = parent_tree
+            else:
+                tree = _get_tree(commit.tree, path)
             parents = commit.parents
             if not parents:
                 if tree is not None:
                     yield commit, Changeset.ADD
                 break
-            parent_tree = _get_tree(parents[0].tree, path)
+            parent = parents[0]
+            parent_tree = _get_tree(parent.tree, path)
             action = None
             if tree is parent_tree is None:
                 return
@@ -1237,12 +1252,17 @@ class GitNode(Node):
 
         def get_commits():
             commits = {}
+            parent = parent_entries = None
             for commit in repos.git_repos.walk(self.rev, _walk_flags):
                 parents = commit.parents
                 if not parents:
                     break
-                entries = get_entries(commit, path)
-                parent_entries = get_entries(parents[0], path)
+                parent = parents[0]
+                if parent is not None and parent.oid == commit.oid:
+                    entries = parent_entries
+                else:
+                    entries = get_entries(commit, path)
+                parent_entries = get_entries(parent, path)
                 for name in names:
                     if name not in commits:
                         entry = entries.get(name)
