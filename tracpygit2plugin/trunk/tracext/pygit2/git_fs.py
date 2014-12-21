@@ -19,7 +19,7 @@ except ImportError:
 else:
     from pygit2 import (
         GIT_OBJ_BLOB, GIT_OBJ_COMMIT, GIT_OBJ_TAG, GIT_OBJ_TREE,
-        GIT_SORT_REVERSE, GIT_SORT_TIME,
+        GIT_SORT_REVERSE, GIT_SORT_TIME, GIT_SORT_TOPOLOGICAL,
     )
     pygit2_version = pygit2.__version__
     if hasattr(pygit2, 'LIBGIT2_VERSION'):
@@ -1227,42 +1227,30 @@ class GitNode(Node):
         path = repos._to_fspath(self.path)
         names = sorted(entry.name for entry in self.tree)
 
-        def get_entries(tree):
-            if not tree:
+        def get_entries(commit, path):
+            tree = repos._get_tree(commit.tree, path)
+            if tree is None:
                 tree = ()
-            d = {}
-            for name in names:
-                if name in tree:
-                    value = tree[name]
-                else:
-                    value = None
-                d[name] = value
-            return d
+            return dict((entry.name, entry) for entry in tree)
 
         def get_commits():
             commits = {}
-            _get_tree = repos._get_tree
-            for commit in repos.git_repos.walk(self.created_rev,
-                                               GIT_SORT_TIME):
-                tree = _get_tree(commit.tree, path)
-                entries = get_entries(tree)
-                for parent in commit.parents:
-                    parent_tree = _get_tree(parent.tree, path)
-                    parent_entries = get_entries(parent_tree)
-                    for name in names:
-                        if name in commits:
-                            continue
-                        entry = entries[name]
-                        parent_entry = parent_entries[name]
-                        if entry is parent_entry is None:
-                            commits[name] = None
-                            continue
-                        if (entry is None or parent_entry is None or
-                            entry.oid != parent_entry.oid):
+            for commit in repos.git_repos.walk(self.rev, GIT_SORT_TOPOLOGICAL |
+                                                         GIT_SORT_TIME):
+                parents = commit.parents
+                if not parents:
+                    break
+                entries = get_entries(commit, path)
+                parent_entries = get_entries(parents[0], path)
+                for name in names:
+                    if name not in commits:
+                        entry = entries.get(name)
+                        parent_entry = parent_entries.get(name)
+                        if entry is None or parent_entry is None or \
+                                entry.oid != parent_entry.oid:
                             commits[name] = commit
-                            continue
-                    if len(commits) == len(names):
-                        return commits
+                if len(commits) == len(names):
+                    return commits
             return commits
 
         commits = get_commits()
