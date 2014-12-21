@@ -1041,7 +1041,7 @@ class GitRepository(Repository):
 
     def next_rev(self, rev, path=''):
         rev = self.normalize_rev(rev)
-        path = self.normalize_path(path)
+        path = self._to_fspath(self.normalize_path(path))
 
         for name, ref, walker in self._iter_ref_walkers(rev):
             if rev not in walker:
@@ -1055,13 +1055,11 @@ class GitRepository(Repository):
                     return None
                 for parent in commit.parents:
                     parent_tree = parent.tree
-                    if entry.oid == parent_tree.oid:
+                    if tree.oid == parent_tree.oid:
                         continue
                     parent_entry = self._get_tree(parent_tree, path)
-                    if entry is parent_entry is None:
-                        continue
-                    if (entry is None or parent_entry is None or
-                        entry.oid != parent_entry.oid):
+                    if entry is None or parent_entry is None or \
+                            entry.oid != parent_entry.oid:
                         return commit.hex
                 rev = commit.hex
 
