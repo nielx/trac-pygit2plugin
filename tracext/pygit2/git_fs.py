@@ -1035,7 +1035,7 @@ class GitRepository(Repository):
                 return parent.hex
         else:
             node = GitNode(self, self.normalize_path(path), commit)
-            for commit, action in node._walk_commits(node.rev):
+            for commit, action in node._walk_commits():
                 for parent in commit.parents:
                     return parent.hex
 
@@ -1156,20 +1156,18 @@ class GitNode(Node):
     def _get_created_commit(self):
         commit = self._created_commit
         if commit is None and self.commit and self.rev:
-            _get_tree = self.repos._get_tree
+            _get_tree_entry = self.repos._get_tree_entry
             path = self.repos._to_fspath(self.path)
             commit = self.commit
-            tree = _get_tree(commit.tree, path)
+            entry = _get_tree_entry(commit.tree, path)
             parents = commit.parents
             if parents:
-                parent_tree = _get_tree(parents[0].tree, path)
-                if parent_tree is not None and parent_tree.oid == tree.oid:
+                parent_entry = _get_tree_entry(parents[0].tree, path)
+                if parent_entry is not None and parent_entry.oid == entry.oid:
                     commit = None
-                    for commit, action in self._walk_commits(self.rev):
+                    for commit, action in self._walk_commits():
                         break
-            if not commit:
-                commit = self.commit
-            self._created_commit = commit
+            self._created_commit = commit or self.commit
         return commit
 
     @property
@@ -1179,33 +1177,29 @@ class GitNode(Node):
             return None
         return commit.hex
 
-    def _walk_commits(self, rev, path=None):
-        if path is None:
-            path = self.path
-
-        _get_tree = self.repos._get_tree
-        path = self.repos._to_fspath(path)
-        parent = parent_tree = None
-        for commit in self.repos.git_repos.walk(rev, _walk_flags):
+    def _walk_commits(self):
+        _get_tree_entry = self.repos._get_tree_entry
+        path = self.repos._to_fspath(self.path)
+        parent = parent_entry = None
+        for commit in self.repos.git_repos.walk(self.rev, _walk_flags):
             if parent is not None and parent.oid == commit.oid:
-                tree = parent_tree
+                entry = parent_entry
             else:
-                tree = _get_tree(commit.tree, path)
+                entry = _get_tree_entry(commit.tree, path)
             parents = commit.parents
             if not parents:
-                if tree is not None:
+                if entry is not None:
                     yield commit, Changeset.ADD
-                break
-            parent = parents[0]
-            parent_tree = _get_tree(parent.tree, path)
-            action = None
-            if tree is parent_tree is None:
                 return
-            if tree is None:
+            parent = parents[0]
+            parent_entry = _get_tree_entry(parent.tree, path)
+            if entry is None:
+                if parent_entry is None:
+                    continue
                 action = Changeset.DELETE
-            elif parent_tree is None:
+            elif parent_entry is None:
                 action = Changeset.ADD
-            elif parent_tree.oid != tree.oid:
+            elif parent_entry.oid != entry.oid:
                 action = Changeset.EDIT
             else:
                 continue
@@ -1290,7 +1284,7 @@ class GitNode(Node):
     def get_history(self, limit=None):
         path = self.path
         count = 0
-        for commit, action in self._walk_commits(self.rev):
+        for commit, action in self._walk_commits():
             yield path, commit.hex, action
             count += 1
             if limit == count:
