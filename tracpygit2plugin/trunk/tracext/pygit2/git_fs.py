@@ -1181,31 +1181,31 @@ class GitNode(Node):
 
     def _walk_commits(self):
         skip_merges = self.isfile
-        _get_tree_entry = self.repos._get_tree_entry
+        _get_tree = self.repos._get_tree
         path = self.repos._to_fspath(self.path)
-        parent = parent_entry = None
+        parent = parent_tree = None
         for commit in self.repos.git_repos.walk(self.rev, _walk_flags):
             if parent is not None and parent.oid == commit.oid:
-                entry = parent_entry
+                tree = parent_tree
             else:
-                entry = _get_tree_entry(commit.tree, path)
+                tree = _get_tree(commit.tree, path)
             parents = commit.parents
             n_parents = len(parents)
             if skip_merges and n_parents > 1:
                 continue
             if n_parents == 0:
-                if entry is not None:
+                if tree is not None:
                     yield commit, Changeset.ADD
                 return
             parent = parents[0]
-            parent_entry = _get_tree_entry(parent.tree, path)
-            if entry is None:
-                if parent_entry is None:
+            parent_tree = _get_tree(parent.tree, path)
+            if tree is None:
+                if parent_tree is None:
                     continue
                 action = Changeset.DELETE
-            elif parent_entry is None:
+            elif parent_tree is None:
                 action = Changeset.ADD
-            elif parent_entry.oid != entry.oid:
+            elif parent_tree.oid != tree.oid:
                 action = Changeset.EDIT
             else:
                 continue
