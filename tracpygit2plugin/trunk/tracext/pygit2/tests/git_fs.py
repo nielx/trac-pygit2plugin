@@ -32,6 +32,8 @@ REPOS_NAME = 'test.git'
 REPOS_URL = 'http://example.org/git/test.git'
 HEAD_REV = u'97553583461dd682de4db752f1e102fb19b019d8'
 HEAD_ABBREV = u'9755358'
+ROOT_REV = u'fc398de9939a675d6001f204c099215337d4eb24'
+ROOT_ABBREV = u'fc398de'
 
 dumpfile_path = os.path.join(os.path.dirname(__file__), 'gitrepos.dump')
 repos_path = None
@@ -152,9 +154,9 @@ class EmptyTestCase(object):
         self.assertRaises(NoSuchChangeset, self.repos.get_changeset, u'')
         self.assertRaises(NoSuchChangeset, self.repos.get_changeset, 42)
         self.assertRaises(NoSuchChangeset, self.repos.get_changeset,
-                          u'fc398de')
+                          ROOT_ABBREV)
         self.assertRaises(NoSuchChangeset, self.repos.get_changeset,
-                          u'fc398de9939a675d6001f204c099215337d4eb24')
+                          ROOT_REV)
 
     def test_get_changesets(self):
         start = datetime(2001, 1, 1, tzinfo=utc)
@@ -165,7 +167,7 @@ class EmptyTestCase(object):
     def test_has_node(self):
         self.assertEquals(False, self.repos.has_node('/', '1' * 40))
         self.assertEquals(True, self.repos.has_node('/'))
-        self.assertEquals(False, self.repos.has_node('/', 'fc398de'))
+        self.assertEquals(False, self.repos.has_node('/', ROOT_ABBREV))
 
     def test_get_node(self):
         node = self.repos.get_node('/')
@@ -175,10 +177,11 @@ class EmptyTestCase(object):
         self.assertEquals(None, node.created_rev)
         self.assertEquals([], list(node.get_entries()))
         self.assertEquals([], list(node.get_history()))
-        self.assertRaises(NoSuchChangeset, self.repos.get_node, '/', 'fc398de')
+        self.assertRaises(NoSuchChangeset, self.repos.get_node, '/',
+                          ROOT_ABBREV)
         self.assertRaises(NoSuchNode, self.repos.get_node, '/path')
         self.assertRaises(NoSuchChangeset, self.repos.get_node, '/path',
-                          'fc398de')
+                          ROOT_ABBREV)
 
     def test_oldest_rev(self):
         self.assertEquals(None, self.repos.oldest_rev)
@@ -212,14 +215,13 @@ class EmptyTestCase(object):
 
     def test_normalize_rev(self):
         self.assertRaises(NoSuchChangeset, self.repos.normalize_rev, None)
-        self.assertRaises(NoSuchChangeset, self.repos.normalize_rev,
-                          'fc398de9939a675d6001f204c099215337d4eb24')
+        self.assertRaises(NoSuchChangeset, self.repos.normalize_rev, ROOT_REV)
         self.assertRaises(NoSuchChangeset, self.repos.normalize_rev, '1' * 40)
         self.assertRaises(NoSuchChangeset, self.repos.normalize_rev, '0' * 40)
 
     def test_get_changes(self):
         self.assertRaises(NoSuchChangeset, self.repos.get_changes,
-                          '/', 'fc398de', '/', '0ee9cfd')
+                          '/', ROOT_ABBREV, '/', '0ee9cfd')
 
 
 class NormalTestCase(object):
@@ -243,21 +245,17 @@ class NormalTestCase(object):
                           entries.next())
         self.assertEquals(('branches', u'stâble', '/', HEAD_REV),
                           entries.next())
-        self.assertEquals(('tags', u'ver0.1', '/',
-                           'fc398de9939a675d6001f204c099215337d4eb24'),
-                          entries.next())
-        self.assertEquals(('tags', u'vér0.1', '/',
-                           'fc398de9939a675d6001f204c099215337d4eb24'),
-                          entries.next())
+        self.assertEquals(('tags', u'ver0.1', '/', ROOT_REV), entries.next())
+        self.assertEquals(('tags', u'vér0.1', '/', ROOT_REV), entries.next())
         self.assertRaises(StopIteration, entries.next)
 
     def test_get_path_url(self):
         self.assertEquals(REPOS_URL, self.repos.get_path_url('/', None))
-        self.assertEquals(REPOS_URL, self.repos.get_path_url('/', 'fc398de'))
+        self.assertEquals(REPOS_URL, self.repos.get_path_url('/', ROOT_ABBREV))
         self.assertEquals(REPOS_URL, self.repos.get_path_url('/.gitignore',
                                                              None))
         self.assertEquals(REPOS_URL, self.repos.get_path_url('/.gitignore',
-                                                             'fc398de'))
+                                                             ROOT_ABBREV))
 
     def test_get_path_url_not_specified(self):
         provider = DbRepositoryProvider(self.env)
@@ -277,10 +275,9 @@ class NormalTestCase(object):
         self.assertRaises(NoSuchChangeset, self.repos.get_changeset, 4.2)
 
     def test_changeset_add(self):
-        cset = self.repos.get_changeset('fc398de')
+        cset = self.repos.get_changeset(ROOT_ABBREV)
         self.assert_(isinstance(cset, Changeset), repr(cset))
-        self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
-                          cset.rev)
+        self.assertEquals(ROOT_REV, cset.rev)
         if self.cached_repository:
             self.assertEquals(parse_date('2013-02-14T23:01:25+09:00'),
                               cset.date)
@@ -324,8 +321,7 @@ class NormalTestCase(object):
 
         changes = cset.get_changes()
         self.assertEquals((u'dir/tété.txt', Node.FILE, Changeset.DELETE,
-                           u'dir/tété.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24'),
+                           u'dir/tété.txt', ROOT_REV),
                           changes.next())
         self.assertEquals((u'dir2/simple-another.txt', Node.FILE,
                            Changeset.ADD, None, None),
@@ -338,39 +334,35 @@ class NormalTestCase(object):
                            None, None),
                           changes.next())
         self.assertEquals((u'root-tété.txt', Node.FILE, Changeset.EDIT,
-                           u'root-tété.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24'),
+                           u'root-tété.txt', ROOT_REV),
                           changes.next())
         # Rename āāā-file.txt <- āāā/file.txt
         self.assertEquals((u'āāā-file.txt', Node.FILE, Changeset.MOVE,
-                           u'āāā/file.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24'),
+                           u'āāā/file.txt', ROOT_REV),
                           changes.next())
         self.assertRaises(StopIteration, changes.next)
 
     def test_changeset_get_branches(self):
         self.assertEquals(
             [(u'develöp', False), ('master', False), (u'stâble', False)],
-            self.repos.get_changeset('fc398de').get_branches())
+            self.repos.get_changeset(ROOT_ABBREV).get_branches())
         self.assertEquals(
             [(u'develöp', True), ('master', True), (u'stâble', True)],
             self.repos.get_changeset(HEAD_REV[:7]).get_branches())
 
     def test_changeset_get_tags(self):
         self.assertEquals([u'ver0.1', u'vér0.1'],
-                          self.repos.get_changeset('fc398de').get_tags())
+                          self.repos.get_changeset(ROOT_ABBREV).get_tags())
         self.assertEquals([], self.repos.get_changeset('0ee9cfd').get_tags())
 
     def test_get_changeset_uid(self):
-        rev = u'fc398de9939a675d6001f204c099215337d4eb24'
-        self.assertEquals(rev, self.repos.get_changeset_uid(rev))
+        self.assertEquals(ROOT_REV, self.repos.get_changeset_uid(ROOT_REV))
 
     def test_get_changesets(self):
         changesets = self.repos.get_changesets(
             datetime(2013, 2, 13, 15, 0, 0, tzinfo=utc),
             datetime(2013, 2, 14, 15, 0, 0, tzinfo=utc))
-        self.assertEquals('fc398de9939a675d6001f204c099215337d4eb24',
-                          changesets.next().rev)
+        self.assertEquals(ROOT_REV, changesets.next().rev)
         self.assertRaises(StopIteration, changesets.next)
 
         changesets = self.repos.get_changesets(
@@ -378,8 +370,7 @@ class NormalTestCase(object):
             datetime(2013, 2, 14, 17, 0, 0, tzinfo=utc))
         self.assertEquals('0ee9cfd6538b7b994b94a45ed173d9d45272b0c5',
                           changesets.next().rev)
-        self.assertEquals('fc398de9939a675d6001f204c099215337d4eb24',
-                          changesets.next().rev)
+        self.assertEquals(ROOT_REV, changesets.next().rev)
         self.assertRaises(StopIteration, changesets.next)
 
     def test_has_node(self):
@@ -387,7 +378,8 @@ class NormalTestCase(object):
         self.assertEquals(True, self.repos.has_node('/'))
         self.assertEquals(True, self.repos.has_node('/', '0ee9cfd'))
         self.assertEquals(True, self.repos.has_node('/'))
-        self.assertEquals(True, self.repos.has_node('/.gitignore', 'fc398de'))
+        self.assertEquals(True, self.repos.has_node('/.gitignore',
+                                                    ROOT_ABBREV))
 
     def test_get_node(self):
         node = self.repos.get_node(u'/')
@@ -402,14 +394,12 @@ class NormalTestCase(object):
                           '0ee9cfd')
 
     def test_get_node_directory(self):
-        node = self.repos.get_node(u'/dir', 'fc398de')
+        node = self.repos.get_node(u'/dir', ROOT_ABBREV)
         self.assertEquals(u'dir', node.name)
         self.assertEquals(u'dir', node.path)
         self.assertEquals(Node.DIRECTORY, node.kind)
-        self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
-                          node.rev)
-        self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
-                          node.created_rev)
+        self.assertEquals(ROOT_REV, node.rev)
+        self.assertEquals(ROOT_REV, node.created_rev)
         self.assertEquals(None, node.content_type)
         self.assertEquals(None, node.content_length)
         self.assertEquals(None, node.get_content())
@@ -439,8 +429,7 @@ class NormalTestCase(object):
         self.assertEquals(Node.FILE, node.kind)
         self.assertEquals(u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5',
                           node.rev)
-        self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
-                          node.created_rev)
+        self.assertEquals(ROOT_REV, node.created_rev)
         self.assertRaises(StopIteration, node.get_entries().next)
         self.assertEquals('', node.content_type)
         self.assertEquals(465, node.content_length)
@@ -485,10 +474,7 @@ class NormalTestCase(object):
                            u'0ee9cfd6538b7b994b94a45ed173d9d45272b0c5',
                            'edit'),
                           history.next())
-        self.assertEquals((u'root-tété.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24',
-                           'add'),
-                          history.next())
+        self.assertEquals((u'root-tété.txt', ROOT_REV, 'add'), history.next())
         self.assertRaises(StopIteration, history.next)
 
         node = self.repos.get_node(u'/root-tété.txt')
@@ -499,12 +485,9 @@ class NormalTestCase(object):
                           history.next())
         self.assertRaises(StopIteration, history.next)
 
-        node = self.repos.get_node(u'/root-tété.txt', 'fc398de')
+        node = self.repos.get_node(u'/root-tété.txt', ROOT_ABBREV)
         history = node.get_history()
-        self.assertEquals((u'root-tété.txt',
-                           u'fc398de9939a675d6001f204c099215337d4eb24',
-                           'add'),
-                          history.next())
+        self.assertEquals((u'root-tété.txt', ROOT_REV, 'add'), history.next())
         self.assertRaises(StopIteration, history.next)
 
     def test_get_node_submodule(self):
@@ -528,8 +511,7 @@ class NormalTestCase(object):
         self.assertEquals([], list(node.get_entries()))
 
     def test_oldest_rev(self):
-        self.assertEquals(u'fc398de9939a675d6001f204c099215337d4eb24',
-                          self.repos.oldest_rev)
+        self.assertEquals(ROOT_REV, self.repos.oldest_rev)
 
     def test_youngest_rev(self):
         self.assertEquals(HEAD_REV, self.repos.youngest_rev)
@@ -560,13 +542,16 @@ class NormalTestCase(object):
 
     # TODO: GitRepository.rev_older_than(self, rev1, rev2):
 
+    def test_rev_older_than(self):
+        pass
+
     def test_rev_older_than_nonexistent(self):
         self.assertRaises(NoSuchChangeset, self.repos.rev_older_than,
                           '1' * 40, '1' * 40)
-        self.assertRaises(NoSuchChangeset, self.repos.rev_older_than,
-                          'fc398de9939a675d6001f204c099215337d4eb24', '1' * 40)
-        self.assertRaises(NoSuchChangeset, self.repos.rev_older_than,
-                          '1' * 40, 'fc398de9939a675d6001f204c099215337d4eb24')
+        self.assertRaises(NoSuchChangeset, self.repos.rev_older_than, ROOT_REV,
+                          '1' * 40)
+        self.assertRaises(NoSuchChangeset, self.repos.rev_older_than, '1' * 40,
+                          ROOT_REV)
 
     def test_normalize_path(self):
         self.assertEquals('', self.repos.normalize_path('/'))
@@ -583,8 +568,8 @@ class NormalTestCase(object):
         self.assertEquals(HEAD_REV, self.repos.normalize_rev(u''))
 
     def test_normalize_rev(self):
-        rev = 'fc398de9939a675d6001f204c099215337d4eb24'
-        urev = unicode(rev)
+        rev = str(ROOT_REV)
+        urev = unicode(ROOT_REV)
         self.assertEquals(unicode, type(self.repos.normalize_rev(rev[:7])))
         self.assertEquals(unicode, type(self.repos.normalize_rev(urev[:7])))
         self.assertEquals(urev, self.repos.normalize_rev(rev[:7]))
@@ -605,15 +590,14 @@ class NormalTestCase(object):
         self.assertRaises(NoSuchChangeset, self.repos.normalize_rev, 4.2)
 
     def test_short_rev(self):
-        rev = 'fc398de9939a675d6001f204c099215337d4eb24'
-        urev = unicode(rev)
-
+        rev = str(ROOT_REV)
+        urev = unicode(ROOT_REV)
         self.assertEquals(unicode, type(self.repos.short_rev(rev)))
-        self.assertEquals(u'fc398de', self.repos.short_rev(rev))
-        self.assertEquals(u'fc398de', self.repos.short_rev(rev[:7]))
+        self.assertEquals(ROOT_ABBREV, self.repos.short_rev(rev))
+        self.assertEquals(ROOT_ABBREV, self.repos.short_rev(rev[:7]))
         self.assertEquals(unicode, type(self.repos.short_rev(urev)))
-        self.assertEquals(u'fc398de', self.repos.short_rev(urev))
-        self.assertEquals(u'fc398de', self.repos.short_rev(urev[:7]))
+        self.assertEquals(ROOT_ABBREV, self.repos.short_rev(urev))
+        self.assertEquals(ROOT_ABBREV, self.repos.short_rev(urev[:7]))
 
     def test_short_rev_nonexistent(self):
         self.assertRaises(NoSuchChangeset, self.repos.short_rev, u'1' * 40)
@@ -624,15 +608,14 @@ class NormalTestCase(object):
         self.assertRaises(NoSuchChangeset, self.repos.short_rev, 4.2)
 
     def test_display_rev(self):
-        rev = 'fc398de9939a675d6001f204c099215337d4eb24'
-        urev = unicode(rev)
-
+        rev = str(ROOT_REV)
+        urev = unicode(ROOT_REV)
         self.assertEquals(unicode, type(self.repos.display_rev(rev)))
-        self.assertEquals(u'fc398de', self.repos.display_rev(rev))
-        self.assertEquals(u'fc398de', self.repos.display_rev(rev[:7]))
+        self.assertEquals(ROOT_ABBREV, self.repos.display_rev(rev))
+        self.assertEquals(ROOT_ABBREV, self.repos.display_rev(rev[:7]))
         self.assertEquals(unicode, type(self.repos.display_rev(urev)))
-        self.assertEquals(u'fc398de', self.repos.display_rev(urev))
-        self.assertEquals(u'fc398de', self.repos.display_rev(urev[:7]))
+        self.assertEquals(ROOT_ABBREV, self.repos.display_rev(urev))
+        self.assertEquals(ROOT_ABBREV, self.repos.display_rev(urev[:7]))
 
     def _cmp_change(self, expected, change):
         self.assertEquals(expected, (change[0] and change[0].path,
@@ -640,7 +623,7 @@ class NormalTestCase(object):
                                      change[2], change[3]))
 
     def test_get_changes_different_revs(self):
-        changes = self.repos.get_changes('/', 'fc398de', '/', '0ee9cfd')
+        changes = self.repos.get_changes('/', ROOT_ABBREV, '/', '0ee9cfd')
         self._cmp_change((u'dir/tété.txt', None, Node.FILE, Changeset.DELETE),
                          changes.next())
         self._cmp_change((None, u'dir2/simple-another.txt', Node.FILE,
@@ -690,7 +673,7 @@ class NormalTestCase(object):
         self.assertEquals(expected, node.get_annotations())
 
     def test_get_annotations_unicode(self):
-        node = self.repos.get_node(u'/root-tété.txt', 'fc398de')
+        node = self.repos.get_node(u'/root-tété.txt', ROOT_ABBREV)
         self.assertEquals(['fc398de9939a675d6001f204c099215337d4eb24'],
                           node.get_annotations())
         node = self.repos.get_node(u'/root-tété.txt',
