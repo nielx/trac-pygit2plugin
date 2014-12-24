@@ -490,6 +490,29 @@ class NormalTestCase(object):
         self.assertEquals((u'root-tété.txt', ROOT_REV, 'add'), history.next())
         self.assertRaises(StopIteration, history.next)
 
+    def test_node_get_history_root_dir(self):
+        expected = [('', HEAD_REV,                                   'edit'),
+                    ('', '5fa8e424840c6c4dd331343550d870e6faafadf5', 'edit'),
+                    ('', '0ee9cfd6538b7b994b94a45ed173d9d45272b0c5', 'edit'),
+                    ('', ROOT_REV,                                   'add')]
+        node = self.repos.get_node(u'/')
+        self.assertEquals(expected, list(node.get_history()))
+        node = self.repos.get_node(u'/', HEAD_ABBREV)
+        self.assertEquals(expected, list(node.get_history()))
+        node = self.repos.get_node(u'/', HEAD_ABBREV)
+        self.assertEquals(expected[:1], list(node.get_history(1)))
+        self.assertEquals(expected[:3], list(node.get_history(3)))
+        self.assertEquals(expected, list(node.get_history(4)))
+        self.assertEquals(expected, list(node.get_history(5)))
+
+        expected = [('', ROOT_REV, 'add')]
+        node = self.repos.get_node(u'/', ROOT_REV)
+        self.assertEquals(expected, list(node.get_history()))
+        node = self.repos.get_node(u'/', ROOT_ABBREV)
+        self.assertEquals(expected, list(node.get_history()))
+        self.assertEquals(expected, list(node.get_history(1)))
+        self.assertEquals(expected, list(node.get_history(2)))
+
     def test_get_node_submodule(self):
         node = self.repos.get_node('/')
         entries = dict((node.path, node) for node in node.get_entries())
