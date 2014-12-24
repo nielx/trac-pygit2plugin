@@ -540,10 +540,19 @@ class NormalTestCase(object):
     def test_child_revs_nonexistent(self):
         self.assertRaises(NoSuchChangeset, self.repos.child_revs, '1' * 40)
 
-    # TODO: GitRepository.rev_older_than(self, rev1, rev2):
-
     def test_rev_older_than(self):
-        pass
+        self.assertEquals(True, self.repos.rev_older_than(ROOT_REV, HEAD_REV))
+        self.assertEquals(True, self.repos.rev_older_than(ROOT_ABBREV,
+                                                          HEAD_ABBREV))
+        self.assertEquals(False, self.repos.rev_older_than(HEAD_REV, ROOT_REV))
+        self.assertEquals(False, self.repos.rev_older_than(HEAD_ABBREV,
+                                                           ROOT_ABBREV))
+        self.assertEquals(False, self.repos.rev_older_than(HEAD_REV, HEAD_REV))
+        self.assertEquals(False, self.repos.rev_older_than(HEAD_ABBREV,
+                                                           HEAD_ABBREV))
+        self.assertEquals(False, self.repos.rev_older_than(ROOT_REV, ROOT_REV))
+        self.assertEquals(False, self.repos.rev_older_than(ROOT_ABBREV,
+                                                           ROOT_ABBREV))
 
     def test_rev_older_than_nonexistent(self):
         self.assertRaises(NoSuchChangeset, self.repos.rev_older_than,
