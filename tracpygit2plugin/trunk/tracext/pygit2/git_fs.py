@@ -87,7 +87,7 @@ if pygit2:
         _get_filemode = lambda tree_entry: tree_entry.filemode
     else:
         _get_filemode = lambda tree_entry: tree_entry.attributes
-    _walk_flags = GIT_SORT_TOPOLOGICAL | GIT_SORT_TIME
+    _walk_flags = GIT_SORT_TIME
 else:
     _status_map = {}
     _get_filemode = None
@@ -1178,6 +1178,7 @@ class GitNode(Node):
         return commit.hex
 
     def _walk_commits(self):
+        skip_merges = self.isfile
         _get_tree_entry = self.repos._get_tree_entry
         path = self.repos._to_fspath(self.path)
         parent = parent_entry = None
@@ -1187,7 +1188,10 @@ class GitNode(Node):
             else:
                 entry = _get_tree_entry(commit.tree, path)
             parents = commit.parents
-            if not parents:
+            n_parents = len(parents)
+            if skip_merges and n_parents > 1:
+                continue
+            if n_parents == 0:
                 if entry is not None:
                     yield commit, Changeset.ADD
                 return
@@ -1232,38 +1236,54 @@ class GitNode(Node):
             return
 
         repos = self.repos
+        git_repos = repos.git_repos
+        _get_tree = repos._get_tree
         _from_fspath = repos._from_fspath
         path = repos._to_fspath(self.path)
         names = sorted(entry.name for entry in self.tree)
 
-        def get_entries(commit, path):
-            tree = repos._get_tree(commit.tree, path)
+        def get_entries(commit):
+            tree = _get_tree(commit.tree, path)
             if tree is None:
                 tree = ()
             return dict((entry.name, entry) for entry in tree)
 
+        def is_blob(entry):
+            if entry:
+                return git_repos[entry.oid].type == GIT_OBJ_BLOB
+            else:
+                return True
+
         def get_commits():
             commits = {}
             parent = parent_entries = None
-            for commit in repos.git_repos.walk(self.rev, _walk_flags):
+            for commit in git_repos.walk(self.rev, _walk_flags):
                 parents = commit.parents
-                if not parents:
+                n_parents = len(parents)
+                if n_parents == 0:
                     break
                 parent = parents[0]
-                if parent is not None and parent.oid == commit.oid:
-                    entries = parent_entries
+                if not parent and parent.oid == commit.oid:
+                    curr_entries = parent_entries
                 else:
-                    entries = get_entries(commit, path)
-                parent_entries = get_entries(parent, path)
+                    curr_entries = get_entries(commit)
+                parent_entries = get_entries(parent)
                 for name in names:
-                    if name not in commits:
-                        entry = entries.get(name)
-                        parent_entry = parent_entries.get(name)
-                        if entry is None or parent_entry is None or \
-                                entry.oid != parent_entry.oid:
-                            commits[name] = commit
+                    if name in commits:
+                        continue
+                    curr_entry = curr_entries.get(name)
+                    parent_entry = parent_entries.get(name)
+                    if not curr_entry and not parent_entry:
+                        continue
+                    object_changed = not curr_entry or not parent_entry or \
+                                     curr_entry.oid != parent_entry.oid
+                    if n_parents > 1 and object_changed and \
+                            is_blob(curr_entry) and is_blob(parent_entry):
+                        continue  # skip merge-commit if blob
+                    if object_changed:
+                        commits[name] = commit
                 if len(commits) == len(names):
-                    return commits
+                    break
             return commits
 
         commits = get_commits()
