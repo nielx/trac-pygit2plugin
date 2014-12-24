@@ -1084,8 +1084,10 @@ class GitRepository(Repository):
     def rev_older_than(self, rev1, rev2):
         oid1 = self._resolve_rev(rev1).oid
         oid2 = self._resolve_rev(rev2).oid
-        return any(oid2 == c.oid
-                   for c in self.git_repos.walk(oid1, _walk_flags))
+        if oid1 == oid2:
+            return False
+        return any(oid1 == commit.oid
+                   for commit in self.git_repos.walk(oid2, _walk_flags))
 
     def get_path_history(self, path, rev=None, limit=None):
         raise TracError(_("GitRepository does not support path_history"))
