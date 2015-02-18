@@ -179,7 +179,7 @@ class GitCachedRepository(CachedRepository):
 
         def is_synced(rev):
             cursor = db.cursor()
-            cursor.execute("SELECT COUNT(*) FROM revision "
+            cursor.execute("SELECT COUNT(repos) FROM revision "
                            "WHERE repos=%s AND rev=%s",
                            (self.id, rev))
             for count, in cursor:
