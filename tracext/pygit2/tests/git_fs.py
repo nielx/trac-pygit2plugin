@@ -8,8 +8,10 @@
 
 import os.path
 import shutil
+import sys
 import tempfile
 import unittest
+from cStringIO import StringIO
 from datetime import datetime
 from subprocess import Popen, PIPE
 try:
@@ -41,29 +43,35 @@ git_bin = None
 
 
 def spawn(*args, **kwargs):
-    kw = {'stdout': PIPE, 'stderr': PIPE, 'close_fds': close_fds}
+    kw = {'stdin': PIPE, 'stdout': PIPE, 'stderr': PIPE,
+          'close_fds': close_fds}
     kw.update(kwargs)
-    proc = Popen(args, **kw)
-    stdout, stderr = proc.communicate()
-    assert proc.returncode == 0, stderr
+    return Popen(args, **kw)
 
 
-def create_repository(path, use_dump=True):
+def create_repository(path, use_dump=True, data=None):
     pygit2.init_repository(path, True)
-    if use_dump:
+    if data is None and use_dump:
         f = open(dumpfile_path, 'rb')
         try:
-            spawn(git_bin, '--git-dir=' + path, 'fast-import', stdin=f)
+            data = f.read()
         finally:
             f.close()
+    if data is not None:
+        proc = spawn(git_bin, '--git-dir=' + path, 'fast-import')
+        stdout, stderr = proc.communicate(input=data)
+        assert proc.returncode == 0, stderr
 
 
-def setup_repository(env, path):
+def setup_repository(env, path, reponame=REPOS_NAME, sync=True):
     provider = DbRepositoryProvider(env)
-    provider.add_repository(REPOS_NAME, path, 'pygit2')
-    provider.modify_repository(REPOS_NAME, {'url': REPOS_URL})
-    repos = env.get_repository(REPOS_NAME)
-    repos.sync()
+    provider.add_repository(reponame, path, 'pygit2')
+    provider.modify_repository(reponame, {'url': REPOS_URL})
+    repos = env.get_repository(reponame)
+    if sync:
+        repos.sync()
+        rows = env.db_query("SELECT COUNT(repos) FROM revision "
+                            "WHERE repos=%s", (repos.id,))
     return repos
 
 
@@ -712,6 +720,93 @@ class NormalTestCase(object):
                                    'fc398de9939a675d6001f204c099215337d4eb24')
         self.assertEquals(['fc398de9939a675d6001f204c099215337d4eb24'],
                           node.get_annotations())
+
+    def test_sync_too_many_merges(self):
+        data = self._generate_data_many_merges(100)
+        repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
+        try:
+            create_repository(repos_path, data=data)
+            repos = setup_repository(self.env, repos_path, 'merges.git',
+                                     sync=False)
+            reclimit = sys.getrecursionlimit()
+            try:
+                sys.setrecursionlimit(80)
+                repos.sync()
+            finally:
+                sys.setrecursionlimit(reclimit)
+
+            if self.cached_repository:
+                rows = self.env.db_query("SELECT COUNT(repos) FROM revision "
+                                         "WHERE repos=%s", (repos.id,))
+                self.assertEqual(202, rows[0][0])
+                rows = self.env.db_query("""
+                        SELECT time, COUNT(time) FROM revision
+                        WHERE repos=%s
+                        GROUP BY time ORDER BY time""", (repos.id,))
+                self.assertEqual((1400000000 * 1000000, 2), rows[0])
+                self.assertEqual((1400000100 * 1000000, 2), rows[-1])
+                self.assertEqual(
+                        [(1400000000 + idx) * 1000000 for idx in xrange(101)],
+                        [row[0] for row in rows])
+                self.assertEqual(set([2]), set(row[1] for row in rows))
+                self.assertEqual(101, len(rows))
+        finally:
+            rmtree(repos_path)
+
+    def _generate_data_many_merges(self, n, timestamp=1400000000):
+        init = """\
+blob
+mark :1
+data 0
+
+reset refs/heads/dev
+commit refs/heads/dev
+mark :2
+author Joe <joe@example.com> %(timestamp)d +0000
+committer Joe <joe@example.com> %(timestamp)d +0000
+data 5
+root
+M 100644 :1 .gitignore
+
+commit refs/heads/master
+mark :3
+author Joe <joe@example.com> %(timestamp)d +0000
+committer Joe <joe@example.com> %(timestamp)d +0000
+data 7
+master
+from :2
+M 100644 :1 master.txt
+
+"""
+        merge = """\
+commit refs/heads/dev
+mark :%(dev)d
+author Joe <joe@example.com> %(timestamp)d +0000
+committer Joe <joe@example.com> %(timestamp)d +0000
+data 4
+dev
+from :2
+M 100644 :1 dev%(dev)08d.txt
+
+commit refs/heads/master
+mark :%(merge)d
+author Joe <joe@example.com> %(timestamp)d +0000
+committer Joe <joe@example.com> %(timestamp)d +0000
+data 19
+Merge branch 'dev'
+from :%(from)d
+merge :%(dev)d
+M 100644 :1 dev%(dev)08d.txt
+
+"""
+        data = StringIO()
+        data.write(init % {'timestamp': timestamp})
+        for idx in xrange(n):
+            data.write(merge % {'timestamp': timestamp + idx + 1,
+                                'dev': 4 + idx * 2,
+                                'merge': 5 + idx * 2,
+                                'from': 3 + idx * 2})
+        return data.getvalue()
 
 
 def suite():
