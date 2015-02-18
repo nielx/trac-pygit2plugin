@@ -186,27 +186,27 @@ class GitCachedRepository(CachedRepository):
                 return count > 0
             return False
 
-        def traverse(commit, seen, commits=None):
-            if commits is None:
-                commits = []
+        def traverse(commit, seen):
+            commits = []
+            merges = []
             while True:
                 rev = commit.hex
                 if rev in seen:
-                    return commits
+                    break
                 seen.add(rev)
                 if is_synced(rev):
-                    return commits
+                    break
                 commits.append(commit)
                 parents = commit.parents
-                if not parents:
-                    return commits
-                if len(parents) == 1:
-                    commit = parents[0]
-                    continue
-                idx = len(commits)
-                traverse(parents.pop(), seen, commits)
+                if not parents:  # root commit?
+                    break
+                commit = parents[0]
+                if len(parents) > 1:
+                    merges.append((len(commits), parents[1:]))
+            for idx, parents in reversed(merges):
                 for parent in parents:
                     commits[idx:idx] = traverse(parent, seen)
+            return commits
 
         while True:
             repos_youngest = repos.youngest_rev or ''
