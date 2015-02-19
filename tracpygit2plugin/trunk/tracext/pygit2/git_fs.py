@@ -177,9 +177,9 @@ class GitCachedRepository(CachedRepository):
         db = self.env.get_read_db()
 
         IntegrityError = _db_exc(self.env).IntegrityError
+        cursor = db.cursor()
 
         def is_synced(rev):
-            cursor = db.cursor()
             cursor.execute("SELECT COUNT(repos) FROM revision "
                            "WHERE repos=%s AND rev=%s",
                            (self.id, rev))
@@ -216,7 +216,7 @@ class GitCachedRepository(CachedRepository):
 
             for name in git_repos.listall_references():
                 ref = git_repos.lookup_reference(name)
-                git_object = git_repos[ref.target]
+                git_object = ref.get_object()
                 type_ = git_object.type
                 if type_ == GIT_OBJ_TAG:
                     git_object = git_object.get_object()
@@ -849,7 +849,7 @@ class GitRepository(Repository):
                 if not name.startswith('refs/tags/'):
                     continue
                 ref = git_repos.lookup_reference(name)
-                git_object = git_repos[ref.target]
+                git_object = ref.get_object()
                 if git_object.type == GIT_OBJ_TAG:
                     git_object = git_object.get_object()
                 if rev == git_object.hex:
