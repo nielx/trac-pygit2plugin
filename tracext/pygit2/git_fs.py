@@ -10,6 +10,7 @@ import os
 import posixpath
 from cStringIO import StringIO
 from datetime import datetime
+from threading import RLock
 
 try:
     import pygit2
@@ -402,37 +403,47 @@ def _walk_tree(repos, tree, path=None):
             yield git_object, name
 
 
-class _cached_walker(object):
+class _CachedWalker(object):
 
-    __slots__ = ['walker', 'revs', 'commits']
+    __slots__ = ('rev', 'walker', 'revs', 'commits', '_lock')
 
-    def __init__(self, walker):
-        self.walker = walker
+    def __init__(self, git_repos, rev, flags=_walk_flags):
+        self.rev = rev
+        self.walker = git_repos.walk(rev, flags)
         self.revs = set()
         self.commits = []
+        self._lock = RLock()
 
     def __contains__(self, rev):
-        if rev in self.revs:
-            return True
-        add_rev = self.revs.add
-        add_commit = self.commits.append
-        for commit in self.walker:
-            old_rev = commit.hex
-            add_commit(commit)
-            add_rev(old_rev)
-            if old_rev == rev:
+        self._lock.acquire()
+        try:
+            if rev in self.revs:
                 return True
-        return False
+            add_rev = self.revs.add
+            add_commit = self.commits.append
+            for commit in self.walker:
+                old_rev = commit.hex
+                add_commit(commit)
+                add_rev(old_rev)
+                if old_rev == rev:
+                    return True
+            return False
+        finally:
+            self._lock.release()
 
     def reverse(self, start_rev):
-        if start_rev not in self:
-            return
-        match = False
-        for commit in reversed(self.commits):
-            if not match and commit.hex == start_rev:
-                match = True
-            if match:
-                yield commit
+        self._lock.acquire()
+        try:
+            if start_rev in self:
+                commits = self.commits
+                idx = len(commits) - 1
+                for idx in xrange(len(commits) - 1, -1, -1):
+                    commit = commits[idx]
+                    if commit.hex == start_rev:
+                        return reversed(commits[0:idx + 1])
+            return ()
+        finally:
+            self._lock.release()
 
 
 class GitConnector(Component):
@@ -726,7 +737,7 @@ class GitRepository(Repository):
         self.format_signature = format_signature or _format_signature
         self.use_committer_id = use_committer_id
         self.use_committer_time = use_committer_time
-        self._ref_walkers = None
+        self._ref_walkers = {}
         Repository.__init__(self, 'git:' + path, self.params, log)
 
     def _from_fspath(self, name):
@@ -787,13 +798,11 @@ class GitRepository(Repository):
             return git_object
         return None
 
-    def _get_ref_walkers(self):
-        walkers = self._ref_walkers
-        if walkers is not None:
-            return walkers
-
+    def _iter_ref_walkers(self, rev):
         git_repos = self.git_repos
-        walkers = {}
+        target = git_repos[rev]
+
+        walkers = self._ref_walkers
         for name in git_repos.listall_references():
             if not name.startswith('refs/heads/'):
                 continue
@@ -801,26 +810,13 @@ class GitRepository(Repository):
             commit = self._get_commit(ref.target)
             if not commit:
                 continue
-            walkers[name] = _cached_walker(git_repos.walk(commit.oid,
-                                                          _walk_flags))
-        self._ref_walkers = walkers
-        return walkers
-
-    def _iter_ref_walkers(self, rev):
-        git_repos = self.git_repos
-        target = git_repos[rev]
-
-        walkers = self._get_ref_walkers()
-        for name in git_repos.listall_references():
-            if not name.startswith('refs/heads/'):
-                continue
-            walker = walkers.get(name)
-            if walker is None:
-                continue
-            ref = git_repos.lookup_reference(name)
-            commit = git_repos[ref.target]
             if commit.commit_time < target.commit_time:
                 continue
+            walker = walkers.get(name)
+            if walker and walker.rev != commit.hex:
+                walker = None
+            if not walker:
+                walkers[name] = walker = _CachedWalker(git_repos, commit.hex)
             yield self._from_fspath(name), ref, walker
 
     def _get_changes(self, parent_tree, commit_tree):
@@ -895,7 +891,7 @@ class GitRepository(Repository):
             raise NoSuchChangeset(rev)
 
     def close(self):
-        self.clear()
+        self._ref_walkers.clear()
         self.git_repos = None
 
     def get_youngest_rev(self):
@@ -1091,9 +1087,6 @@ class GitRepository(Repository):
 
     def get_path_history(self, path, rev=None, limit=None):
         raise TracError(_("GitRepository does not support path_history"))
-
-    def clear(self, youngest_rev=None):
-        self._ref_walkers = None
 
 
 class GitNode(Node):
