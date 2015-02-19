@@ -219,7 +219,7 @@ class GitCachedRepository(CachedRepository):
                 git_object = git_repos[ref.target]
                 type_ = git_object.type
                 if type_ == GIT_OBJ_TAG:
-                    git_object = git_repos[git_object.target]
+                    git_object = git_object.get_object()
                     type_ = git_object.type
                 if type_ != GIT_OBJ_COMMIT or not git_object.parents:
                     continue
@@ -793,7 +793,7 @@ class GitRepository(Repository):
         except (KeyError, ValueError):
             return None
         if git_object.type == GIT_OBJ_TAG:
-            git_object = git_repos[git_object.target]
+            git_object = git_object.get_object()
         if git_object.type == GIT_OBJ_COMMIT:
             return git_object
         return None
@@ -851,7 +851,7 @@ class GitRepository(Repository):
                 ref = git_repos.lookup_reference(name)
                 git_object = git_repos[ref.target]
                 if git_object.type == GIT_OBJ_TAG:
-                    git_object = git_repos[git_object.target]
+                    git_object = git_object.get_object()
                 if rev == git_object.hex:
                     yield _from_fspath(name[10:])
 
