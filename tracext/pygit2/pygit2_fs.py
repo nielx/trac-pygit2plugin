@@ -183,9 +183,8 @@ class GitCachedRepository(CachedRepository):
             cursor.execute("SELECT COUNT(repos) FROM revision "
                            "WHERE repos=%s AND rev=%s",
                            (self.id, rev))
-            for count, in cursor:
-                return count > 0
-            return False
+            row = cursor.fetchone()
+            return row[0] > 0
 
         def traverse(commit, seen):
             commits = []
@@ -221,7 +220,7 @@ class GitCachedRepository(CachedRepository):
                 if type_ == GIT_OBJ_TAG:
                     git_object = git_object.get_object()
                     type_ = git_object.type
-                if type_ != GIT_OBJ_COMMIT or not git_object.parents:
+                if type_ != GIT_OBJ_COMMIT:
                     continue
 
                 commits = traverse(git_object, seen)  # topology ordered

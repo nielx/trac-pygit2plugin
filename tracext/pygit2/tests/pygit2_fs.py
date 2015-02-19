@@ -719,6 +719,44 @@ class NormalTestCase(object):
         self.assertEquals(['fc398de9939a675d6001f204c099215337d4eb24'],
                           node.get_annotations())
 
+    def test_sync_only_root_commit(self):
+        if not self.cached_repository:
+            return
+
+        data = """\
+blob
+mark :1
+data 0
+
+reset refs/heads/master
+commit refs/heads/master
+mark :2
+author Joe <joe@example.com> 1400000000 +0000
+committer Joe <joe@example.com> 1400000000 +0000
+data 5
+root
+M 100644 :1 .gitignore
+"""
+        repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
+        try:
+            create_repository(repos_path, data=data)
+            repos = setup_repository(self.env, repos_path, 'second.git')
+            db = self.env.get_read_db()
+            cursor = db.cursor()
+            cursor.execute("SELECT rev FROM revision WHERE repos=%s",
+                           (repos.id,))
+            rows = cursor.fetchall()
+            self.assertEqual(1, len(rows))
+            rev = rows[0][0]
+            cursor.execute("SELECT path, node_type, change_type "
+                           "FROM node_change WHERE repos=%s AND rev=%s",
+                           (repos.id, rev))
+            rows = cursor.fetchall()
+            self.assertEqual(('.gitignore', 'F', 'A'), rows[0])
+            self.assertEqual(1, len(rows))
+        finally:
+            rmtree(repos_path)
+
     def test_sync_too_many_merges(self):
         data = self._generate_data_many_merges(100)
         repos_path = tempfile.mkdtemp(prefix='trac-gitrepos-')
