@@ -27,7 +27,7 @@ from trac.versioncontrol import DbRepositoryProvider, RepositoryManager
 from trac.versioncontrol.api import (
     Changeset, Node, NoSuchChangeset, NoSuchNode,
 )
-from tracext.pygit2 import git_fs
+from tracext.pygit2 import pygit2_fs
 
 
 REPOS_NAME = 'test.git'
