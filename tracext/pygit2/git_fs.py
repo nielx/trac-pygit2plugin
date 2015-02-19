@@ -603,7 +603,7 @@ class GitConnector(Component):
         if email:
             email = email.lower()
             for username, name, _email in self.env.get_known_users():
-                if email == _email.lower():
+                if _email and email == _email.lower():
                     return username
         return _format_signature(signature)
 
