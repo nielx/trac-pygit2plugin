@@ -70,8 +70,6 @@ def setup_repository(env, path, reponame=REPOS_NAME, sync=True):
     repos = env.get_repository(reponame)
     if sync:
         repos.sync()
-        rows = env.db_query("SELECT COUNT(repos) FROM revision "
-                            "WHERE repos=%s", (repos.id,))
     return repos
 
 
@@ -736,13 +734,16 @@ class NormalTestCase(object):
                 sys.setrecursionlimit(reclimit)
 
             if self.cached_repository:
-                rows = self.env.db_query("SELECT COUNT(repos) FROM revision "
-                                         "WHERE repos=%s", (repos.id,))
+                db = self.env.get_read_db()
+                cursor = db.cursor()
+                cursor.execute("SELECT COUNT(repos) FROM revision "
+                               "WHERE repos=%s", (repos.id,))
+                rows = cursor.fetchall()
                 self.assertEqual(202, rows[0][0])
-                rows = self.env.db_query("""
-                        SELECT time, COUNT(time) FROM revision
-                        WHERE repos=%s
-                        GROUP BY time ORDER BY time""", (repos.id,))
+                cursor.execute("SELECT time, COUNT(time) FROM revision "
+                               "WHERE repos=%s GROUP BY time ORDER BY time",
+                               (repos.id,))
+                rows = cursor.fetchall()
                 self.assertEqual((1400000000 * 1000000, 2), rows[0])
                 self.assertEqual((1400000100 * 1000000, 2), rows[-1])
                 self.assertEqual(
