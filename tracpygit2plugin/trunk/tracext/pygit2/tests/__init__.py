@@ -8,12 +8,12 @@
 
 import unittest
 
-from tracext.pygit2.tests import git_fs
+from tracext.pygit2.tests import pygit2_fs
 
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTest(git_fs.suite())
+    suite.addTest(pygit2_fs.suite())
     return suite
 
 
