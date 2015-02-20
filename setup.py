@@ -22,7 +22,7 @@ def main():
         'install_requires': ['Trac', 'pygit2'],
         'entry_points': {
             'trac.plugins': [
-                'tracext.pygit2.git_fs = tracext.pygit2.git_fs',
+                'tracext.pygit2.pygit2_fs = tracext.pygit2.pygit2_fs',
                 'tracext.pygit2.translation = tracext.pygit2.translation',
             ],
         },
