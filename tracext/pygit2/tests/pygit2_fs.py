@@ -63,9 +63,10 @@ def create_repository(path, use_dump=True, data=None):
         assert proc.returncode == 0, stderr
 
 
-def setup_repository(env, path, reponame=REPOS_NAME, sync=True):
+def setup_repository(env, path, reponame=REPOS_NAME, sync=True,
+                     repotype='pygit2'):
     provider = DbRepositoryProvider(env)
-    provider.add_repository(reponame, path, 'pygit2')
+    provider.add_repository(reponame, path, repotype)
     provider.modify_repository(reponame, {'url': REPOS_URL})
     repos = env.get_repository(reponame)
     if sync:
@@ -228,6 +229,25 @@ class EmptyTestCase(object):
     def test_get_changes(self):
         self.assertRaises(NoSuchChangeset, self.repos.get_changes,
                           '/', ROOT_ABBREV, '/', '0ee9cfd')
+
+    def test_invalid_path(self):
+        provider = DbRepositoryProvider(self.env)
+        provider.add_repository('invalid-path', repos_path + '-notfound',
+                                'pygit2')
+        provider.modify_repository('invalid-path', {'url': REPOS_URL})
+        self.assertRaises(TracError, self.env.get_repository, 'invalid-path')
+
+    def test_repotype(self):
+        repos = setup_repository(self.env, repos_path, 'direct.git',
+                                 repotype='direct-pygit2')
+        self.assertEquals(pygit2_fs.GitRepository, type(repos))
+        repos = setup_repository(self.env, repos_path, 'cached.git',
+                                 repotype='cached-pygit2')
+        self.assertEquals(pygit2_fs.GitCachedRepository, type(repos))
+        if self.cached_repository:
+            self.assertEquals(pygit2_fs.GitCachedRepository, type(self.repos))
+        else:
+            self.assertEquals(pygit2_fs.GitRepository, type(self.repos))
 
 
 class NormalTestCase(object):
