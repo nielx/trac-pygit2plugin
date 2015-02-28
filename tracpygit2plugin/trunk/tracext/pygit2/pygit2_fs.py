@@ -36,7 +36,7 @@ from trac.util.compat import any
 from trac.util.datefmt import (
     FixedOffset, format_datetime, to_timestamp, to_utimestamp, utc,
 )
-from trac.util.text import to_unicode
+from trac.util.text import exception_to_unicode, to_unicode
 from trac.versioncontrol.api import (
     Changeset, Node, Repository, IRepositoryConnector, NoSuchChangeset,
     NoSuchNode,
@@ -724,8 +724,9 @@ class GitRepository(Repository):
 
         try:
             self.git_repos = pygit2.Repository(path)
-        except:
-            log.warn('Not git repository: %r', path, exc_info=True)
+        except Exception, e:
+            log.warn('Not git repository: %r (%s)', path,
+                     exception_to_unicode(e))
             raise TracError(_("%(path)s does not appear to be a Git "
                               "repository.", path=path))
 
