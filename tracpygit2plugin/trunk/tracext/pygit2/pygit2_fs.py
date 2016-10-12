@@ -89,10 +89,20 @@ if pygit2:
     else:
         _get_filemode = lambda tree_entry: tree_entry.attributes
     _walk_flags = GIT_SORT_TIME
+    if not hasattr(pygit2.Patch, 'delta'):  # prior to v0.22.1
+        def _iter_changes_from_diff(diff):
+            for patch in diff:
+                yield patch.old_file_path, patch.new_file_path, patch.status
+    else:
+        def _iter_changes_from_diff(diff):
+            for patch in diff:
+                delta = patch.delta
+                yield delta.old_file.path, delta.new_file.path, delta.status
 else:
     _status_map = {}
     _get_filemode = None
     _walk_flags = 0
+    _iter_changes_from_diff = None
 
 
 _inverted_kindmap = {Node.DIRECTORY: 'D', Node.FILE: 'F'}
@@ -827,9 +837,9 @@ class GitRepository(Repository):
                     for patch in diff) <= _diff_find_rename_limit:
             diff.find_similar()
         _from_fspath = self._from_fspath
-        generator = ((_from_fspath(patch.old_file_path),
-                      _from_fspath(patch.new_file_path), patch.status)
-                     for patch in diff if patch.status in _status_map)
+        generator = ((_from_fspath(old_path), _from_fspath(new_path), status)
+                     for old_path, new_path, status
+                     in _iter_changes_from_diff(diff) if status in _status_map)
         return sorted(generator, key=lambda item: item[1])
 
     def _get_branches(self, rev):
